@@ -79,6 +79,7 @@
   const mark = () => `<span class="logo__mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${MARKS[tenantKey] || ''}</svg></span>`;
   const logo = sub => `<span class="logo">${mark()}<span class="logo__name">${esc(T().nombre)}${sub ? `<span class="logo__sub">${sub}</span>` : ''}</span></span>`;
   const pdfUrl = n => `docs/${tenantKey}-${n}.pdf`;
+  const pdfExists = n => !/^P-/.test(n);
   const badge = e => {
     const m = { Pagada: 'b-ok', Pendiente: 'b-warn', Vencida: 'b-bad', 'Pendiente de servir': 'b-warn', Servido: 'b-info', Facturado: 'b-ok', 'Sin facturar': 'b-info', Conectado: 'b-ok', Nunca: 'b-info' };
     return `<span class="badge ${m[e] || 'b-info'}">${esc(e)}</span>`;
@@ -223,8 +224,9 @@
     const albMes = c.albaranes.filter(a => a.fecha.startsWith(D.hoy.slice(0, 7)));
     const hoyTxt = cap(new Date(D.hoy + 'T12:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }));
     shell('inicio', `
-      <div class="head"><div><p class="eyebrow">${hoyTxt}</p><h1>Hola, ${esc(c.contacto.split(' ')[0])}</h1><p>${esc(c.nombre)} · cliente de ${esc(t.nombre)}</p></div></div>
-      ${venc.length ? `<a class="alert" href="#/facturas?estado=Vencida">${I.alert}<span><b>Tienes ${plural(venc.length, 'factura vencida', 'facturas vencidas')} por ${eur(venc.reduce((s, f) => s + f.total, 0))}.</b> Revísalas para evitar retrasos en tus próximos pedidos.</span>${I.chev}</a>` : ''}
+      <div class="head"><div><p class="eyebrow">${hoyTxt}</p><h1>Hola, ${esc(c.contacto.split(' ')[0])}</h1><p>${esc(c.nombre)} · cliente de ${esc(t.nombre)}</p></div>
+        <div class="head__act">${pend.length ? `<button class="btn btn--ghost" data-pay="">${I.bank}Pagar facturas</button>` : ''}<button class="btn btn--brand" data-new>${I.box}Nuevo pedido</button></div></div>
+      ${venc.length ? `<a class="alert" href="#/facturas?estado=Vencida">${I.alert}<span><b>Tienes ${plural(venc.length, 'factura vencida', 'facturas vencidas')} por ${eur(venc.reduce((s, f) => s + f.total, 0))}.</b> Págala ahora para evitar retrasos en tus próximos pedidos.</span>${I.chev}</a>` : ''}
       <div class="stats">
         <a class="stat stat--brand" href="#/facturas?estado=Pendiente"><span>Pendiente de pago</span><strong>${eur(pend.reduce((s, f) => s + f.total, 0))}</strong><small>${prox ? `Próximo vencimiento: ${fecha(prox.vencimiento)}` : plural(pend.length, 'factura')}</small>${I.chev}</a>
         <a class="stat" href="#/pedidos?estado=Pendiente de servir"><span>Pendientes de servir</span><strong>${porServir.length}</strong><small>${porServir.length ? plural(porServir.length, 'pedido') + ' por salir' : 'Todo servido'}</small>${I.chev}</a>
@@ -238,7 +240,7 @@
               <div><b>${f.numero}</b><span class="sub">${fecha(f.fecha)} · ${vencTxt(f)}</span></div>
               <div class="row-r">${badge(f.estado)}<b class="amt">${eur(f.total)}</b><a class="icon-btn" href="${pdfUrl(f.numero)}" download aria-label="Descargar ${f.numero} en PDF">${I.down}</a></div></li>`).join('')}</ul>
           </section>
-          <section class="card" aria-labelledby="h-ped"><div class="card__head"><h3 id="h-ped">Últimos pedidos</h3><a href="#/pedidos">Ver todos</a></div>
+          <section class="card" aria-labelledby="h-ped"><div class="card__head"><h3 id="h-ped">Últimos pedidos</h3><div class="card__links">${c.pedidos[0] ? `<button type="button" class="link-btn" data-repeat="${c.pedidos[0].numero}">Repetir el último</button>` : ''}<a href="#/pedidos">Ver todos</a></div></div>
             <ul class="list list--rows">${c.pedidos.slice(0, 5).map(p => `<li data-doc="pedidos:${p.numero}">
               <div><b>${p.numero}</b><span class="sub">${fecha(p.fecha)} · ${esc(productos(p))}</span></div>
               <div class="row-r">${badge(p.estado)}<b class="amt">${eur(p.total)}</b></div></li>`).join('')}</ul>
@@ -246,7 +248,7 @@
         </div>
         <aside class="dash__side">
           <section class="card" aria-labelledby="h-pay"><div class="card__head"><h3 id="h-pay">Cómo pagar</h3></div>
-            <div class="card__pad"><p class="muted">Por transferencia. Indica el número de factura en el concepto.</p>${payBox(prox ? prox.numero : 'Nº de factura')}</div>
+            <div class="card__pad">${pend.length ? `<button class="btn btn--brand btn--block" data-pay="">${I.lock}Pagar con tarjeta o Bizum</button><p class="or"><span>o por transferencia</span></p>` : '<p class="muted">Estás al día. Cuando tengas una factura pendiente podrás pagarla aquí con tarjeta o Bizum.</p>'}${payBox(prox ? prox.numero : 'Nº de factura')}</div>
           </section>
           <section class="card" aria-labelledby="h-cont"><div class="card__head"><h3 id="h-cont">Tu contacto en ${esc(t.nombre)}</h3></div>
             <div class="card__pad contact">
@@ -272,7 +274,7 @@
     const st = { q: '', estado: cfg.states.includes(pre) ? pre : cfg.states[0], year: '2026', sel: new Set() };
     const sel = kind !== 'pedidos';
     shell(kind, `
-      <div class="head"><div><h1>${cfg.title}</h1><p>${cfg.desc}</p></div></div>
+      <div class="head"><div><h1>${cfg.title}</h1><p>${cfg.desc}</p></div>${kind === 'pedidos' ? `<button class="btn btn--brand" data-new>${I.box}Nuevo pedido</button>` : kind === 'facturas' && c.facturas.some(f => f.estado !== 'Pagada') ? `<button class="btn btn--brand" data-pay="">${I.lock}Pagar pendientes</button>` : ''}</div>
       <section class="card" aria-label="${cfg.title}">
         <div class="toolbar">
           <div class="search">${I.search}<input type="search" id="q" placeholder="${cfg.ph}" aria-label="${cfg.ph}"></div>
@@ -371,7 +373,7 @@
     const title = { pedidos: 'Pedido', albaranes: 'Albarán', facturas: 'Factura' }[kind];
     const ref = (k, n) => n ? `<button type="button" class="ref" data-go="${k}:${n}">${n}</button>` : '<span class="muted">Pendiente</span>';
     const meta = {
-      pedidos: () => [['Fecha', fecha(r.fecha)], ['Productos', plural(r.lineas.length, 'producto')], ['Albarán', ref('albaranes', r.albaran)], ['Factura', ref('facturas', r.factura)]],
+      pedidos: () => [['Fecha', fecha(r.fecha)], r.entrega ? ['Entrega', diaTxt(r.entrega)] : ['Productos', plural(r.lineas.length, 'producto')], ['Albarán', ref('albaranes', r.albaran)], ['Factura', ref('facturas', r.factura)]],
       albaranes: () => [['Fecha', fecha(r.fecha)], ['Peso total', kg(r.kg)], ['Pedido', ref('pedidos', r.pedido)], ['Factura', r.factura ? ref('facturas', r.factura) : '<span class="muted">Sin facturar</span>']],
       facturas: () => [['Fecha', fecha(r.fecha)], ['Vencimiento', `${fecha(r.vencimiento)}${r.estado !== 'Pagada' ? `<span class="sub ${r.estado === 'Vencida' ? 'is-bad' : ''}">${vencTxt(r)}</span>` : ''}`], ['Albaranes', r.albaranes.map(a => ref('albaranes', a)).join(' ')], ['Base + IVA', `${eur(r.base)} + ${eur(r.iva)}`]]
     }[kind]();
@@ -379,15 +381,18 @@
     const idx = kind === 'pedidos' ? ({ 'Pendiente de servir': 0, Servido: 1, Facturado: 2 })[r.estado] : -1;
     const body = `
       <div class="doc-top"><div>${kind === 'albaranes' ? badge(r.factura ? 'Facturado' : 'Sin facturar') : badge(r.estado)}</div><strong class="doc-total">${eur(r.total)}</strong></div>
+      ${r.obs ? `<p class="note">${I.doc}<span><b>Observaciones:</b> ${esc(r.obs)}</span></p>` : ''}
       ${kind === 'pedidos' ? `<ol class="steps-h">${steps.map((s, i) => `<li class="${i <= idx ? 'done' : ''}${i === idx ? ' now' : ''}"><span></span>${s}</li>`).join('')}</ol>` : ''}
       <dl class="meta">${meta.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
       ${kind === 'facturas' && r.estado !== 'Pagada' ? `<section class="pay-block"><h3>Cómo pagar esta factura</h3>${payBox(r.numero)}</section>` : ''}
       <div class="lines-wrap"><table class="lines"><thead><tr><th scope="col">Producto</th><th scope="col" class="num">Cantidad</th><th scope="col" class="num">Precio</th><th scope="col" class="num">Importe</th></tr></thead>
         <tbody>${lines.map(l => `<tr><td>${esc(l.producto)}</td><td class="num">${kg(l.kg)}</td><td class="num">${eur(l.precio)}/kg</td><td class="num">${eur(l.importe)}</td></tr>`).join('')}</tbody></table></div>
       <div class="totals"><div><span>Base imponible</span><span>${eur(r.base)}</span></div><div><span>IVA 10 %</span><span>${eur(r.iva)}</span></div><div class="t"><span>Total</span><span>${eur(r.total)}</span></div></div>`;
-    const foot = kind !== 'pedidos'
-      ? `<a class="btn btn--brand" href="${pdfUrl(r.numero)}" download>${I.down}Descargar PDF</a><a class="btn btn--ghost" href="${pdfUrl(r.numero)}" target="_blank" rel="noopener">${I.eye}Abrir</a>`
-      : (r.albaran ? `<button class="btn btn--ghost" data-go="albaranes:${r.albaran}">${I.truck}Ver albarán</button>${r.factura ? `<button class="btn btn--ghost" data-go="facturas:${r.factura}">${I.doc}Ver factura</button>` : ''}` : `<p class="hint" style="margin:0">El albarán estará disponible cuando se sirva el pedido.</p>`);
+    const foot = kind === 'facturas' && r.estado !== 'Pagada'
+      ? `<button class="btn btn--brand" data-pay="${r.numero}">${I.lock}Pagar ${eur(r.total)}</button><a class="btn btn--ghost" href="${pdfUrl(r.numero)}" download>${I.down}Descargar PDF</a>`
+      : kind !== 'pedidos'
+        ? `<a class="btn btn--brand" href="${pdfUrl(r.numero)}" download>${I.down}Descargar PDF</a><a class="btn btn--ghost" href="${pdfUrl(r.numero)}" target="_blank" rel="noopener">${I.eye}Abrir</a>`
+        : `<button class="btn btn--brand" data-repeat="${r.numero}">${I.box}Repetir pedido</button>${r.albaran ? `<button class="btn btn--ghost" data-go="albaranes:${r.albaran}">${I.truck}Ver albarán</button>` : ''}${r.factura ? `<button class="btn btn--ghost" data-go="facturas:${r.factura}">${I.doc}Ver factura</button>` : ''}`;
     const { wrap, close } = drawer(`${title} ${esc(r.numero)}`, `${esc(T().nombre)} · ${esc(c.nombre)}`, body, foot);
     wrap.addEventListener('click', e => { const g = e.target.closest('[data-go]'); if (g) { const [k, n] = g.dataset.go.split(':'); openDoc(k, n); } });
   }
@@ -403,6 +408,7 @@
             <dl class="kv">${[['Empresa', c.nombre], ['NIF', c.nif], ['Persona de contacto', c.contacto], ['Email de acceso', c.email]].map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
             <div class="card__foot"><p class="muted">¿Algún dato no es correcto? Se actualizan desde el programa de facturación de ${esc(t.nombre)}.</p><a class="btn btn--ghost btn--sm" href="mailto:${esc(t.email)}?subject=${encodeURIComponent('Corrección de datos · ' + c.nombre)}">${I.mail}Pedir un cambio</a></div>
           </section>
+          ${avisosCard()}
         </div>
         <aside class="dash__side">
           <section class="card"><div class="card__head"><h3>Cómo pagar</h3></div><div class="card__pad">${payBox('Nº de factura')}</div></section>
@@ -411,6 +417,7 @@
           </section>
         </aside>
       </div>`, clientTabs, c.contacto, c.nombre);
+    bindAvisos();
   }
 
   /* ---------- Panel del mayorista ---------- */
@@ -593,6 +600,7 @@
               ${c.email ? `<button class="btn btn--ghost btn--sm" data-toast="Invitación enviada a ${esc(c.nombre)}">${I.send}Invitar</button>` : `<span class="sub" style="text-align:right">Añade su email<br>en Mercagestion</span>`}</li>`).join('') : '<li><span class="sub">Todos tus clientes han entrado recientemente.</span></li>'}</ul>
           </section>
 
+          ${autoAvisos()}
           <section class="card" aria-labelledby="h-sync">
             <div class="card__head"><h3 id="h-sync">Mercagestion</h3>${badge('Conectado')}</div>
             <div class="sync-meta"><div><span>Última recepción</span><b>Hoy, ${A.sync.find(s => s.d === hoyISO)?.h || '—'}</b></div><div><span>Errores</span><b>0</b></div></div>
@@ -616,6 +624,150 @@
     if (!app._toastBound) { app._toastBound = true; app.addEventListener('click', e => { const b = e.target.closest('[data-toast]'); if (b) toast(b.dataset.toast); }); }
     draw();
   }
+
+  /* ---------- Fase 2: repetir pedido, pagar y avisos ---------- */
+  const catalogo = () => {
+    const t = T(); if (t._cat) return t._cat;
+    const m = {};
+    t.clientes.forEach(c => c.pedidos.forEach(p => (p.lineas || []).forEach(l => (m[l.producto] = m[l.producto] || []).push(l.precio))));
+    return (t._cat = Object.entries(m).map(([producto, ps]) => ({ producto, precio: Math.round(ps.reduce((a, b) => a + b, 0) / ps.length * 100) / 100 })).sort((a, b) => a.producto.localeCompare(b.producto)));
+  };
+  const entregas = () => {
+    const out = []; let d = new Date(D.hoy + 'T12:00');
+    while (out.length < 3) { d = new Date(d.getTime() + 864e5); if (d.getDay() !== 0) out.push(d.toISOString().slice(0, 10)); }
+    return out;
+  };
+  const diaTxt = iso => cap(new Date(iso + 'T12:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }));
+
+  function nuevoPedido(base) {
+    const c = C(), cat = catalogo();
+    const lines = (base ? base.lineas : []).map(l => ({ producto: l.producto, kg: l.kg, precio: (cat.find(x => x.producto === l.producto) || l).precio }));
+    const ent = entregas(); let entrega = ent[0];
+    const body = `
+      ${base ? `<p class="note">${I.box}<span>Copiado del pedido <b>${base.numero}</b> del ${fecha(base.fecha)}. Ajusta las cantidades antes de enviarlo.</span></p>` : ''}
+      <section><h3 class="dr-h">Productos</h3><div id="np-lines"></div>
+        <div class="np-add"><label class="sr-only" for="np-prod">Añadir producto</label><select id="np-prod"><option value="">+ Añadir producto</option>${cat.map(p => `<option>${esc(p.producto)}</option>`).join('')}</select></div></section>
+      <section><h3 class="dr-h">Entrega</h3><div class="opts" role="radiogroup" aria-label="Día de entrega">${ent.map((d, i) => `<label class="opt"><input type="radio" name="ent" value="${d}"${i ? '' : ' checked'}><span><b>${diaTxt(d)}</b><small>${i === 0 ? 'Si lo envías antes de las 22:00' : 'Reparto de madrugada'}</small></span></label>`).join('')}</div></section>
+      <section><h3 class="dr-h"><label for="np-obs">Observaciones</label></h3><textarea id="np-obs" rows="3" placeholder="Por ejemplo: la merluza, en piezas de 2 kg"></textarea></section>
+      <div class="totals" id="np-tot"></div>
+      <p class="hint">Precios orientativos: pueden variar según la lonja del día. ${esc(T().nombre)} te confirmará el pedido.</p>`;
+    const { wrap, close } = drawer(base ? 'Repetir pedido' : 'Nuevo pedido', `${esc(T().nombre)} · ${esc(c.nombre)}`, body,
+      `<button class="btn btn--brand" id="np-send">${I.send}Enviar pedido</button><button class="btn btn--ghost" data-close>Cancelar</button>`);
+    const draw = () => {
+      $('#np-lines', wrap).innerHTML = lines.length ? `<ul class="np-list">${lines.map((l, i) => `<li>
+          <div class="np-p"><b>${esc(l.producto)}</b><span class="sub">${eur(l.precio)}/kg</span></div>
+          <div class="qty"><button type="button" class="icon-btn" data-q="${i}:-1" aria-label="Medio kilo menos de ${esc(l.producto)}">−</button><label class="sr-only" for="q${i}">Kilos de ${esc(l.producto)}</label><input id="q${i}" inputmode="decimal" value="${String(l.kg).replace('.', ',')}" data-k="${i}"><span aria-hidden="true">kg</span><button type="button" class="icon-btn" data-q="${i}:1" aria-label="Medio kilo más de ${esc(l.producto)}">+</button></div>
+          <b class="amt">${eur(l.kg * l.precio)}</b>
+          <button type="button" class="icon-btn np-rm" data-rm="${i}" aria-label="Quitar ${esc(l.producto)}">${I.x}</button></li>`).join('')}</ul>`
+        : '<p class="muted">Añade los productos que necesitas.</p>';
+      const b = lines.reduce((s, l) => s + l.kg * l.precio, 0);
+      $('#np-tot', wrap).innerHTML = `<div><span>Base imponible</span><span>${eur(b)}</span></div><div><span>IVA 10 %</span><span>${eur(b * .1)}</span></div><div class="t"><span>Total estimado</span><span>${eur(b * 1.1)}</span></div>`;
+      $('#np-send', wrap).disabled = !lines.length;
+    };
+    wrap.addEventListener('click', e => {
+      const q = e.target.closest('[data-q]'); if (q) { const [i, d] = q.dataset.q.split(':').map(Number); lines[i].kg = Math.max(.5, Math.round((lines[i].kg + d * .5) * 10) / 10); draw(); $(`#q${i}`, wrap).focus(); }
+      const r = e.target.closest('[data-rm]'); if (r) { const p = lines[+r.dataset.rm].producto; lines.splice(+r.dataset.rm, 1); draw(); say(p + ' quitado'); }
+    });
+    wrap.addEventListener('change', e => {
+      const k = e.target.closest('[data-k]'); if (k) { const v = parseFloat(k.value.replace(',', '.')); lines[+k.dataset.k].kg = isNaN(v) || v <= 0 ? .5 : Math.round(v * 10) / 10; draw(); }
+      if (e.target.id === 'np-prod' && e.target.value) {
+        const p = cat.find(x => x.producto === e.target.value); const ex = lines.find(l => l.producto === p.producto);
+        ex ? ex.kg += 1 : lines.push({ producto: p.producto, kg: 2, precio: p.precio });
+        e.target.value = ''; draw(); say(p.producto + ' añadido');
+      }
+      if (e.target.name === 'ent') entrega = e.target.value;
+    });
+    $('#np-send', wrap).onclick = () => {
+      const n = 'P-' + (Math.max(...c.pedidos.map(p => +p.numero.slice(2))) + 1);
+      const ls = lines.map(l => ({ producto: l.producto, kg: l.kg, precio: l.precio, importe: Math.round(l.kg * l.precio * 100) / 100 }));
+      const b = Math.round(ls.reduce((s, l) => s + l.importe, 0) * 100) / 100;
+      c.pedidos.unshift({ numero: n, fecha: D.hoy, entrega, obs: $('#np-obs', wrap).value.trim(), estado: 'Pendiente de servir', lineas: ls, base: b, iva: Math.round(b * 10) / 100, total: Math.round(b * 110) / 100, albaran: null, factura: null });
+      close();
+      toast(`Pedido ${n} enviado. Entrega: ${diaTxt(entrega).toLowerCase()}.`);
+      if (location.hash.startsWith('#/pedidos')) route(); else location.hash = '#/pedidos';
+    };
+    draw();
+  }
+
+  function pagar(nums) {
+    const c = C();
+    const pend = c.facturas.filter(f => f.estado !== 'Pagada').sort((a, b) => a.vencimiento.localeCompare(b.vencimiento));
+    if (!pend.length) { toast('No tienes facturas pendientes.'); return; }
+    const sel = new Set(nums && nums.length ? nums : pend.map(f => f.numero));
+    let metodo = 'tarjeta';
+    const body = `
+      <section><h3 class="dr-h">Facturas a pagar</h3><ul class="list list--flat">${pend.map(f => `<li>
+        <label class="pick"><input type="checkbox" class="check" value="${f.numero}"${sel.has(f.numero) ? ' checked' : ''}><span><b>${f.numero}</b><span class="sub">${vencTxt(f)}</span></span></label>
+        <div class="row-r">${badge(f.estado)}<b class="amt">${eur(f.total)}</b></div></li>`).join('')}</ul></section>
+      <section><h3 class="dr-h">Forma de pago</h3><div class="opts" role="radiogroup" aria-label="Forma de pago">
+        <label class="opt"><input type="radio" name="met" value="tarjeta" checked><span><b>Tarjeta</b><small>Visa o Mastercard, en la pasarela segura del banco</small></span></label>
+        <label class="opt"><input type="radio" name="met" value="bizum"><span><b>Bizum</b><small>Lo confirmas desde la app de tu banco</small></span></label>
+        <label class="opt"><input type="radio" name="met" value="transferencia"><span><b>Transferencia</b><small>Tarda uno o dos días en llegar</small></span></label>
+      </div><div id="pay-extra"></div></section>
+      <p class="secure">${I.lock}${esc(T().nombre)} nunca ve los datos de tu tarjeta.</p>`;
+    const { wrap } = drawer('Pagar facturas', `${esc(T().nombre)} · ${esc(c.nombre)}`, body, `<button class="btn btn--brand" id="pay-go"></button><button class="btn btn--ghost" data-close>Cancelar</button>`);
+    const total = () => pend.filter(f => sel.has(f.numero)).reduce((s, f) => s + f.total, 0);
+    const sync = () => {
+      const go = $('#pay-go', wrap); go.disabled = !sel.size;
+      go.innerHTML = metodo === 'transferencia' ? `${I.check}Ya he hecho la transferencia` : `${I.lock}Pagar ${eur(total())}`;
+      $('#pay-extra', wrap).innerHTML = metodo === 'transferencia' ? `<div style="margin-top:1rem">${payBox([...sel].join(', ') || 'Nº de factura')}</div>` : '';
+    };
+    wrap.addEventListener('change', e => {
+      if (e.target.matches('.pick input')) { e.target.checked ? sel.add(e.target.value) : sel.delete(e.target.value); sync(); }
+      if (e.target.name === 'met') { metodo = e.target.value; sync(); }
+    });
+    $('#pay-go', wrap).onclick = () => {
+      const tot = total(), pagadas = [...sel];
+      const panel = $('.drawer__panel', wrap);
+      if (metodo === 'transferencia') {
+        $('.drawer__body', panel).innerHTML = `<div class="paying ok"><span class="ok-ico">${I.clock}</span><h3>Gracias, lo tenemos en cuenta</h3><p>Marcaremos ${plural(pagadas.length, 'la factura', 'las facturas')} como ${pagadas.length === 1 ? 'pagada' : 'pagadas'} en cuanto llegue la transferencia de <b>${eur(tot)}</b>.</p></div>`;
+        $('.drawer__foot', panel).innerHTML = `<button class="btn btn--brand" data-close>Hecho</button>`; $('[data-close]', panel).focus(); return;
+      }
+      $('.drawer__body', panel).innerHTML = `<div class="paying"><span class="spin" aria-hidden="true"></span><h3>${metodo === 'bizum' ? 'Confirma el pago en la app de tu banco' : 'Conectando con la pasarela segura del banco'}</h3><p class="muted">Demostración: no se realiza ningún cargo.</p></div>`;
+      $('.drawer__foot', panel).innerHTML = '';
+      say('Procesando el pago');
+      setTimeout(() => {
+        pend.filter(f => sel.has(f.numero)).forEach(f => { f.estado = 'Pagada'; });
+        $('.drawer__body', panel).innerHTML = `<div class="paying ok"><span class="ok-ico">${I.check}</span><h3>Pago recibido</h3><p><b>${eur(tot)}</b> · ${pagadas.join(', ')}</p><p class="muted">Te hemos enviado el justificante por email y ${esc(T().nombre)} ya lo ve en su panel.</p></div>`;
+        $('.drawer__foot', panel).innerHTML = `<button class="btn btn--brand" data-close>Hecho</button>`;
+        $('[data-close]', panel).focus(); say('Pago recibido');
+        wrap.addEventListener('click', e => { if (e.target.closest('[data-close]')) setTimeout(route, 280); });
+      }, 1800);
+    };
+    sync();
+  }
+
+  const AVISOS = [['factura', 'Hay una factura nueva'], ['vence', 'Una factura vence en 3 días'], ['servido', 'Mi pedido está servido'], ['albaran', 'Hay un albarán nuevo']];
+  function avisosCard() {
+    const cfg = store.get('avisos-' + tenantKey, { factura: ['email', 'wa'], vence: ['wa'], servido: ['wa'], albaran: [] });
+    return `<section class="card" aria-labelledby="h-av"><div class="card__head"><h3 id="h-av">Avisos</h3><span class="sub">Para no tener que entrar a mirar</span></div>
+      <form id="f-av"><table class="avisos"><thead><tr><th scope="col">Avísame cuando…</th><th scope="col" class="c">Email</th><th scope="col" class="c">WhatsApp</th></tr></thead><tbody>
+      ${AVISOS.map(([k, l]) => `<tr><th scope="row">${l}</th>${['email', 'wa'].map(ch => `<td class="c"><label class="sw"><input type="checkbox" name="${k}" value="${ch}"${(cfg[k] || []).includes(ch) ? ' checked' : ''}><span class="sr-only">${l}: ${ch === 'wa' ? 'WhatsApp' : 'email'}</span><i aria-hidden="true"></i></label></td>`).join('')}</tr>`).join('')}
+      </tbody></table>
+      <div class="av-foot"><div class="field"><label for="wa">Móvil para WhatsApp</label><input id="wa" type="tel" inputmode="tel" autocomplete="tel" value="${esc(store.get('wa-' + tenantKey, '600 000 100'))}"></div><button class="btn btn--dark" type="submit">Guardar avisos</button></div></form></section>`;
+  }
+  function bindAvisos() {
+    const f = $('#f-av'); if (!f) return;
+    f.addEventListener('submit', e => {
+      e.preventDefault();
+      const cfg = {}; AVISOS.forEach(([k]) => { cfg[k] = $$(`input[name="${k}"]:checked`, f).map(i => i.value); });
+      store.set('avisos-' + tenantKey, cfg); store.set('wa-' + tenantKey, $('#wa', f).value.trim());
+      toast('Avisos guardados');
+    });
+  }
+  const autoAvisos = () => `
+    <section class="card" aria-labelledby="h-auto"><div class="card__head"><h3 id="h-auto">Avisos automáticos</h3></div>
+      <p class="card__intro">Tus clientes los reciben por email o WhatsApp sin que tengas que hacer nada.</p>
+      <ul class="list">${[['Factura nueva disponible', 42], ['Recordatorio 3 días antes de vencer', 11], ['Aviso de factura vencida', 3], ['Pedido servido', 96]].map(([l, n]) => `<li><div><b>${l}</b><span class="sub">${n} enviados este mes</span></div>
+        <label class="sw"><input type="checkbox" checked data-auto="${l}"><span class="sr-only">${l}</span><i aria-hidden="true"></i></label></li>`).join('')}</ul>
+    </section>`;
+
+  document.addEventListener('click', e => {
+    if (e.target.closest('[data-new]')) { nuevoPedido(null); return; }
+    const r = e.target.closest('[data-repeat]'); if (r) { nuevoPedido(C().pedidos.find(p => p.numero === r.dataset.repeat)); return; }
+    const p = e.target.closest('[data-pay]'); if (p) pagar(p.dataset.pay ? p.dataset.pay.split(',') : null);
+  });
+  document.addEventListener('change', e => { const a = e.target.closest('[data-auto]'); if (a) toast(`${a.dataset.auto}: ${a.checked ? 'activado' : 'desactivado'}`); });
 
   /* ---------- Rutas ---------- */
   function route() {
