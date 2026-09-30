@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Área de clientes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/app.css?v=8">
+</head>
+<body>
+<div class="demo-bar" role="region" aria-label="Controles de la demostración">
+  <span class="demo-bar__tag">Demo</span>
+  <label>Mayorista
+    <select id="demo-tenant">
+      <option value="laguna">Pescados Laguna</option>
+      <option value="costanorte">Mariscos Costa Norte</option>
+    </select>
+  </label>
+  <div class="demo-bar__seg" role="group" aria-label="Vista">
+    <button type="button" data-view="cliente" aria-pressed="true">Vista del minorista</button>
+    <button type="button" data-view="panel" aria-pressed="false">Panel del mayorista</button>
+  </div>
+</div>
+<div id="app"></div>
+<p class="sr-only" aria-live="polite" id="live"></p>
+<script src="assets/data.js"></script>
+<script src="assets/app.js?v=8"></script>
+</body>
+</html>
