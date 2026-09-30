@@ -8,9 +8,15 @@
     set(k, v) { try { sessionStorage.setItem(k, JSON.stringify(v)); } catch {} }
   };
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const eur = n => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(n);
+  // Siempre con separador de miles (4.595,47 €), igual que 10.965,08 €
+  const eurFmt = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', useGrouping: 'always' });
+  const eur = n => eurFmt.format(n);
   const fecha = iso => new Date(iso + 'T12:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '');
   const kg = n => n.toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' kg';
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+  const mes = iso => cap(new Date(iso + 'T12:00').toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }));
+  const diasHasta = iso => Math.round((new Date(iso + 'T12:00') - new Date(D.hoy + 'T12:00')) / 864e5);
+  const plural = (n, s, p) => `${n} ${n === 1 ? s : (p || s + 's')}`;
   const svg = p => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
   const I = {
     home: svg('<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/>'),
@@ -23,13 +29,25 @@
     eye: svg('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
     search: svg('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
     arrow: svg('<path d="M5 12h14M13 6l6 6-6 6"/>'),
+    chev: svg('<path d="m9 6 6 6-6 6"/>'),
     x: svg('<path d="M6 6l12 12M18 6 6 18"/>'),
     out: svg('<path d="M15 4h4v16h-4M10 16l4-4-4-4M14 12H4"/>'),
     check: svg('<path d="m5 12 5 5 9-10"/>'),
     mail: svg('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 6.5 8.5 6.5 8.5-6.5"/>'),
+    phone: svg('<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/>'),
+    clock: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+    bank: svg('<path d="M3 10 12 4l9 6M5 10v8M9 10v8M15 10v8M19 10v8M3 20h18"/>'),
+    copy: svg('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>'),
+    alert: svg('<path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/>'),
+    lock: svg('<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>'),
     bolt: svg('<path d="M13 3 5 14h6l-1 7 8-11h-6z"/>'),
     chart: svg('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),
     send: svg('<path d="M21 3 10 14M21 3l-7 18-4-7-7-4z"/>')
+  };
+  // Marca de cada mayorista de la demo
+  const MARKS = {
+    laguna: '<path d="M2.5 12c3.2-5 9-6.4 13.2-3.3L20.5 5v14l-4.8-3.7C11.5 18.4 5.7 17 2.5 12z"/><circle cx="8" cy="11" r="1.1" fill="currentColor" stroke="none"/>',
+    costanorte: '<path d="M4 13a8 8 0 0 1 16 0z"/><path d="M12 5v8M8.5 6.5 10.5 13M15.5 6.5 13.5 13"/><path d="M3 17c2 0 2-1.5 4.5-1.5S9.5 17 12 17s2-1.5 4.5-1.5S19 17 21 17"/>'
   };
 
   /* ---------- Estado ---------- */
@@ -46,6 +64,7 @@
   const T = () => D.mayoristas[tenantKey];
   const C = () => T().clientes[0]; // minorista de la demo
   const logged = () => store.get('logged-' + tenantKey, false);
+  const route_ = () => { const [path, qs] = location.hash.replace(/^#\//, '').split('?'); return { path: path || '', q: new URLSearchParams(qs || '') }; };
 
   function applyBrand() {
     document.documentElement.style.setProperty('--brand', T().color);
@@ -53,16 +72,35 @@
   }
   const say = t => { $('#live').textContent = t; };
   function toast(t) {
-    const el = document.createElement('div'); el.className = 'toast'; el.textContent = t; document.body.append(el);
+    const el = document.createElement('div'); el.className = 'toast'; el.setAttribute('role', 'status'); el.textContent = t; document.body.append(el);
     requestAnimationFrame(() => el.classList.add('show'));
     setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, 2600);
   }
-  const logo = (sub) => `<span class="logo"><span class="logo__mark" aria-hidden="true">${esc(T().iniciales)}</span><span class="logo__name">${esc(T().nombre)}${sub ? `<span class="logo__sub">${sub}</span>` : ''}</span></span>`;
+  const mark = () => `<span class="logo__mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${MARKS[tenantKey] || ''}</svg></span>`;
+  const logo = sub => `<span class="logo">${mark()}<span class="logo__name">${esc(T().nombre)}${sub ? `<span class="logo__sub">${sub}</span>` : ''}</span></span>`;
   const pdfUrl = n => `docs/${tenantKey}-${n}.pdf`;
   const badge = e => {
-    const m = { Pagada: 'b-ok', Pendiente: 'b-warn', Vencida: 'b-bad', 'Pendiente de servir': 'b-warn', Servido: 'b-info', Facturado: 'b-ok', 'Sin facturar': 'b-info' };
+    const m = { Pagada: 'b-ok', Pendiente: 'b-warn', Vencida: 'b-bad', 'Pendiente de servir': 'b-warn', Servido: 'b-info', Facturado: 'b-ok', 'Sin facturar': 'b-info', Conectado: 'b-ok', Nunca: 'b-info' };
     return `<span class="badge ${m[e] || 'b-info'}">${esc(e)}</span>`;
   };
+  const productos = p => { const n = p.lineas.map(l => l.producto); return n.length <= 2 ? n.join(' y ') : `${n.slice(0, 2).join(', ')} y ${n.length - 2} más`; };
+  const vencTxt = f => {
+    if (f.estado === 'Pagada') return 'Pagada';
+    const d = diasHasta(f.vencimiento);
+    return d < 0 ? `Vencida hace ${plural(-d, 'día')}` : d === 0 ? 'Vence hoy' : `Vence en ${plural(d, 'día')}`;
+  };
+  async function copy(text, ok) {
+    try { await navigator.clipboard.writeText(text); toast(ok); } catch { toast('No se ha podido copiar. Selecciona el texto y cópialo.'); }
+  }
+  const payBox = (concepto) => `
+    <div class="pay">
+      <div class="pay__row"><span class="pay__ico">${I.bank}</span><div><span class="pay__l">IBAN · ${esc(T().banco)}</span><b class="pay__v">${esc(T().iban)}</b></div>
+        <button type="button" class="icon-btn" data-copy="${esc(T().iban.replace(/\s/g, ''))}" data-ok="IBAN copiado" aria-label="Copiar IBAN">${I.copy}</button></div>
+      <div class="pay__row"><span class="pay__ico">${I.doc}</span><div><span class="pay__l">Concepto de la transferencia</span><b class="pay__v">${esc(concepto)}</b></div>
+        <button type="button" class="icon-btn" data-copy="${esc(concepto)}" data-ok="Concepto copiado" aria-label="Copiar concepto">${I.copy}</button></div>
+    </div>`;
+  // Botones de copiar en cualquier pantalla
+  document.addEventListener('click', e => { const b = e.target.closest('[data-copy]'); if (b) copy(b.dataset.copy, b.dataset.ok); });
 
   /* ---------- Barra de la demo ---------- */
   $('#demo-tenant').value = tenantKey;
@@ -78,7 +116,8 @@
   });
 
   /* ---------- Acceso sin contraseña ---------- */
-  function loginEmail() {
+  function loginLayout(inner) {
+    const t = T();
     app.innerHTML = `
     <div class="login">
       <aside class="login__side">
@@ -86,49 +125,54 @@
         <div>
           <h1>Tus pedidos y facturas, siempre a mano.</h1>
           <ul>
-            <li>${I.box}Consulta tus pedidos y si ya están servidos</li>
-            <li>${I.truck}Consulta y descarga tus albaranes</li>
-            <li>${I.doc}Descarga tus facturas en PDF cuando quieras</li>
+            <li><span>${I.box}</span>Consulta tus pedidos y si ya están servidos</li>
+            <li><span>${I.truck}</span>Descarga tus albaranes al momento</li>
+            <li><span>${I.doc}</span>Tus facturas en PDF, sin tener que pedirlas</li>
           </ul>
         </div>
-        <small>${esc(T().direccion)}</small>
+        <div class="login__help">
+          <b>¿Necesitas ayuda?</b>
+          <span>${I.phone}${esc(t.telefono)}</span>
+          <span>${I.clock}${esc(t.horario)}</span>
+          <small>${esc(t.direccion)}</small>
+        </div>
       </aside>
-      <main class="login__main">
-        <form class="login__box" id="f-email" novalidate>
-          <div><h2>Área de clientes</h2><p style="margin-top:.5rem">Escribe tu email y te enviaremos un código para entrar. Sin contraseñas.</p></div>
-          <div class="field"><label for="email">Email</label><input id="email" type="email" autocomplete="email" required value="${esc(C().email)}"></div>
-          <p class="error" id="err" role="alert"></p>
-          <button class="btn btn--brand btn--block" type="submit">Enviarme el código ${I.arrow}</button>
-          <p class="hint">Usa el email con el que ${esc(T().nombre)} te envía las facturas. ¿No te llega? Llámanos al <b>${esc(T().telefono)}</b>.</p>
-        </form>
-      </main>
+      <main class="login__main">${inner}</main>
     </div>`;
+  }
+
+  function loginEmail() {
+    loginLayout(`
+      <form class="login__box" id="f-email" novalidate>
+        <div><h2>Área de clientes</h2><p class="login__p">Escribe tu email y te enviaremos un código para entrar. Sin contraseñas que recordar.</p></div>
+        <div class="field"><label for="email">Email</label><input id="email" type="email" autocomplete="email" inputmode="email" required value="${esc(C().email)}" aria-describedby="err"></div>
+        <p class="error" id="err" role="alert"></p>
+        <button class="btn btn--brand btn--block btn--lg" type="submit">Enviarme el código ${I.arrow}</button>
+        <p class="hint">Usa el email con el que ${esc(T().nombre)} te envía las facturas.</p>
+        <p class="secure">${I.lock}Acceso seguro · solo tú ves tus documentos</p>
+      </form>`);
     $('#f-email').addEventListener('submit', e => {
       e.preventDefault();
       const v = $('#email').value.trim();
-      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { $('#err').textContent = 'Revisa el email.'; $('#email').focus(); return; }
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { $('#err').textContent = 'Escribe un email válido, por ejemplo nombre@tuempresa.com'; $('#email').setAttribute('aria-invalid', 'true'); $('#email').focus(); return; }
       store.set('email', v); location.hash = '#/codigo';
     });
   }
 
   function loginCode() {
     const email = store.get('email', C().email);
-    app.innerHTML = `
-    <div class="login">
-      <aside class="login__side">${logo()}<div><h1>Revisa tu correo.</h1></div><small>${esc(T().direccion)}</small></aside>
-      <main class="login__main">
-        <form class="login__box" id="f-code" novalidate>
-          <div><h2>Introduce el código</h2><p style="margin-top:.5rem">Lo hemos enviado a <b>${esc(email)}</b>. Caduca en 10 minutos.</p></div>
-          <fieldset style="border:0;padding:0;margin:0"><legend class="sr-only">Código de 6 cifras</legend>
-            <div class="code">${Array.from({ length: 6 }, (_, i) => `<input inputmode="numeric" maxlength="1" aria-label="Cifra ${i + 1}" autocomplete="${i ? 'off' : 'one-time-code'}">`).join('')}</div>
-          </fieldset>
-          <p class="error" id="err" role="alert"></p>
-          <button class="btn btn--brand btn--block" type="submit">Entrar ${I.arrow}</button>
-          <p class="hint">En esta demo el código es <b>123456</b>.</p>
-          <div style="display:flex;justify-content:space-between"><button type="button" class="link-btn" id="back">Cambiar email</button><button type="button" class="link-btn" id="resend">Reenviar código</button></div>
-        </form>
-      </main>
-    </div>`;
+    loginLayout(`
+      <form class="login__box" id="f-code" novalidate>
+        <span class="login__mail">${I.mail}</span>
+        <div><h2>Revisa tu correo</h2><p class="login__p">Hemos enviado un código de 6 cifras a <b>${esc(email)}</b>. Caduca en 10 minutos.</p></div>
+        <fieldset class="code-f"><legend class="sr-only">Código de 6 cifras</legend>
+          <div class="code">${Array.from({ length: 6 }, (_, i) => `<input inputmode="numeric" maxlength="1" aria-label="Cifra ${i + 1} de 6" autocomplete="${i ? 'off' : 'one-time-code'}">`).join('')}</div>
+        </fieldset>
+        <p class="error" id="err" role="alert"></p>
+        <button class="btn btn--brand btn--block btn--lg" type="submit">Entrar ${I.arrow}</button>
+        <p class="hint">En esta demo el código es <b>123456</b>.</p>
+        <div class="login__links"><button type="button" class="link-btn" id="back">Cambiar email</button><button type="button" class="link-btn" id="resend">Reenviar código</button></div>
+      </form>`);
     const ins = $$('.code input'); ins[0].focus();
     ins.forEach((inp, i) => {
       inp.addEventListener('input', () => {
@@ -146,158 +190,226 @@
     $('#resend').onclick = () => toast('Te hemos enviado un código nuevo.');
     $('#f-code').addEventListener('submit', e => {
       e.preventDefault();
-      if (ins.map(x => x.value).join('') !== '123456') { $('#err').textContent = 'El código no es correcto. En la demo es 123456.'; ins.forEach(x => x.value = ''); ins[0].focus(); return; }
+      if (ins.map(x => x.value).join('') !== '123456') { $('#err').textContent = 'El código no es correcto. Revisa el último email que te hemos enviado.'; ins.forEach(x => x.value = ''); ins[0].focus(); return; }
       store.set('logged-' + tenantKey, true); location.hash = '#/inicio';
     });
   }
 
-  /* ---------- Estructura del área de clientes ---------- */
+  /* ---------- Estructura ---------- */
   function shell(active, content, tabs, whoName, whoSub) {
     app.innerHTML = `
     <div class="shell">
       <header class="topbar"><div class="topbar__in">
         ${logo(view === 'panel' ? 'Panel de gestión' : 'Área de clientes')}
-        <nav class="tabs" aria-label="Secciones">${tabs.map(([h, t, ic]) => `<a href="#/${h}"${h === active ? ' aria-current="page"' : ''}>${ic}${t}</a>`).join('')}</nav>
-        <div class="who"><span class="who__avatar" aria-hidden="true">${esc(view === 'panel' ? T().iniciales : whoName.split(' ').map(w => w[0]).slice(0, 2).join(''))}</span><span class="who__name"><b>${esc(whoName)}</b><span>${esc(whoSub)}</span></span>
+        <nav class="tabs${tabs.length < 4 ? ' tabs--few' : ''}" aria-label="Secciones">${tabs.map(([h, t, ic]) => `<a href="#/${h}"${h === active ? ' aria-current="page"' : ''}>${ic}<span>${t}</span></a>`).join('')}</nav>
+        <div class="who"><span class="who__avatar" aria-hidden="true">${esc(view === 'panel' ? whoName.replace('Equipo de ', '').split(' ').map(w => w[0]).slice(0, 2).join('') : whoName.split(' ').map(w => w[0]).slice(0, 2).join(''))}</span><span class="who__name"><b>${esc(whoName)}</b><span>${esc(whoSub)}</span></span>
           ${view === 'cliente' ? `<button class="icon-btn" id="logout" aria-label="Cerrar sesión" title="Cerrar sesión">${I.out}</button>` : ''}</div>
       </div></header>
       <main class="main" id="main" tabindex="-1">${content}</main>
-      <footer class="pf"><span>${esc(T().forma)} · ${esc(T().telefono)} · ${esc(T().email)}</span><span>Área de clientes conectada con Mercagestion</span></footer>
+      <footer class="pf"><span>${esc(T().forma)} · ${esc(T().telefono)} · ${esc(T().email)}</span><span>Conectado con Mercagestion</span></footer>
     </div>`;
     const lo = $('#logout'); if (lo) lo.onclick = () => { store.set('logged-' + tenantKey, false); location.hash = '#/acceso'; };
   }
   const clientTabs = [['inicio', 'Resumen', I.home], ['pedidos', 'Pedidos', I.box], ['albaranes', 'Albaranes', I.truck], ['facturas', 'Facturas', I.doc], ['perfil', 'Perfil', I.user]];
 
+  /* ---------- Resumen ---------- */
   function inicio() {
-    const c = C(); const pend = c.facturas.filter(f => f.estado !== 'Pagada');
+    const c = C(), t = T();
+    const pend = c.facturas.filter(f => f.estado !== 'Pagada');
+    const venc = pend.filter(f => f.estado === 'Vencida');
+    const prox = pend.filter(f => f.estado === 'Pendiente').sort((a, b) => a.vencimiento.localeCompare(b.vencimiento))[0];
     const year = c.facturas.filter(f => f.fecha.startsWith('2026'));
-    const activos = c.pedidos.filter(p => p.estado === 'Pendiente de servir');
+    const porServir = c.pedidos.filter(p => p.estado === 'Pendiente de servir');
+    const albMes = c.albaranes.filter(a => a.fecha.startsWith(D.hoy.slice(0, 7)));
+    const hoyTxt = cap(new Date(D.hoy + 'T12:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }));
     shell('inicio', `
-      <div class="head"><div><h1>Hola, ${esc(c.contacto.split(' ')[0])}</h1><p>${esc(c.nombre)} · cliente de ${esc(T().nombre)}</p></div></div>
+      <div class="head"><div><p class="eyebrow">${hoyTxt}</p><h1>Hola, ${esc(c.contacto.split(' ')[0])}</h1><p>${esc(c.nombre)} · cliente de ${esc(t.nombre)}</p></div></div>
+      ${venc.length ? `<a class="alert" href="#/facturas?estado=Vencida">${I.alert}<span><b>Tienes ${plural(venc.length, 'factura vencida', 'facturas vencidas')} por ${eur(venc.reduce((s, f) => s + f.total, 0))}.</b> Revísalas para evitar retrasos en tus próximos pedidos.</span>${I.chev}</a>` : ''}
       <div class="stats">
-        <div class="stat stat--brand"><span>Pendiente de pago</span><strong>${eur(pend.reduce((s, f) => s + f.total, 0))}</strong><small>${pend.length} factura${pend.length === 1 ? '' : 's'}</small></div>
-        <div class="stat"><span>Pendientes de servir</span><strong>${activos.length}</strong><small>${activos.length ? 'pedido' + (activos.length === 1 ? '' : 's') + ' por salir' : 'Todo servido'}</small></div>
-        <div class="stat"><span>Facturado en 2026</span><strong>${eur(year.reduce((s, f) => s + f.total, 0))}</strong><small>${year.length} facturas</small></div>
-        <div class="stat"><span>Albaranes este mes</span><strong>${c.albaranes.filter(a => a.fecha.startsWith('2026-09')).length}</strong><small>septiembre</small></div>
+        <a class="stat stat--brand" href="#/facturas?estado=Pendiente"><span>Pendiente de pago</span><strong>${eur(pend.reduce((s, f) => s + f.total, 0))}</strong><small>${prox ? `Próximo vencimiento: ${fecha(prox.vencimiento)}` : plural(pend.length, 'factura')}</small>${I.chev}</a>
+        <a class="stat" href="#/pedidos?estado=Pendiente de servir"><span>Pendientes de servir</span><strong>${porServir.length}</strong><small>${porServir.length ? plural(porServir.length, 'pedido') + ' por salir' : 'Todo servido'}</small>${I.chev}</a>
+        <a class="stat" href="#/albaranes"><span>Albaranes este mes</span><strong>${albMes.length}</strong><small>${kg(albMes.reduce((s, a) => s + a.kg, 0))} en total</small>${I.chev}</a>
+        <a class="stat" href="#/facturas"><span>Facturado en 2026</span><strong>${eur(year.reduce((s, f) => s + f.total, 0))}</strong><small>${plural(year.length, 'factura')}</small>${I.chev}</a>
       </div>
-      <div class="grid2">
-        <section class="card" aria-labelledby="h-ped"><div class="card__head"><h3 id="h-ped">Últimos pedidos</h3><a href="#/pedidos">Ver todos</a></div>
-          <ul class="list">${c.pedidos.slice(0, 5).map(p => `<li><div><b>${p.numero}</b><span class="sub">${fecha(p.fecha)} · ${p.lineas.length} productos</span></div><div style="display:flex;gap:1rem;align-items:center">${badge(p.estado)}<b>${eur(p.total)}</b></div></li>`).join('')}</ul>
-        </section>
-        <section class="card" aria-labelledby="h-fac"><div class="card__head"><h3 id="h-fac">Últimas facturas</h3><a href="#/facturas">Ver todas</a></div>
-          <ul class="list">${c.facturas.slice(0, 4).map(f => `<li><div><b>${f.numero}</b><span class="sub">${fecha(f.fecha)} · ${badge(f.estado)}</span></div><div style="display:flex;gap:.75rem;align-items:center"><b>${eur(f.total)}</b><a class="icon-btn" href="${pdfUrl(f.numero)}" download aria-label="Descargar ${f.numero} en PDF">${I.down}</a></div></li>`).join('')}</ul>
-        </section>
+      <div class="dash">
+        <div class="dash__main">
+          <section class="card" aria-labelledby="h-fac"><div class="card__head"><h3 id="h-fac">Últimas facturas</h3><a href="#/facturas">Ver todas</a></div>
+            <ul class="list list--rows">${c.facturas.slice(0, 4).map(f => `<li data-doc="facturas:${f.numero}">
+              <div><b>${f.numero}</b><span class="sub">${fecha(f.fecha)} · ${vencTxt(f)}</span></div>
+              <div class="row-r">${badge(f.estado)}<b class="amt">${eur(f.total)}</b><a class="icon-btn" href="${pdfUrl(f.numero)}" download aria-label="Descargar ${f.numero} en PDF">${I.down}</a></div></li>`).join('')}</ul>
+          </section>
+          <section class="card" aria-labelledby="h-ped"><div class="card__head"><h3 id="h-ped">Últimos pedidos</h3><a href="#/pedidos">Ver todos</a></div>
+            <ul class="list list--rows">${c.pedidos.slice(0, 5).map(p => `<li data-doc="pedidos:${p.numero}">
+              <div><b>${p.numero}</b><span class="sub">${fecha(p.fecha)} · ${esc(productos(p))}</span></div>
+              <div class="row-r">${badge(p.estado)}<b class="amt">${eur(p.total)}</b></div></li>`).join('')}</ul>
+          </section>
+        </div>
+        <aside class="dash__side">
+          <section class="card" aria-labelledby="h-pay"><div class="card__head"><h3 id="h-pay">Cómo pagar</h3></div>
+            <div class="card__pad"><p class="muted">Por transferencia. Indica el número de factura en el concepto.</p>${payBox(prox ? prox.numero : 'Nº de factura')}</div>
+          </section>
+          <section class="card" aria-labelledby="h-cont"><div class="card__head"><h3 id="h-cont">Tu contacto en ${esc(t.nombre)}</h3></div>
+            <div class="card__pad contact">
+              <div class="contact__who"><span class="who__avatar">${esc(t.comercial.split(' ').map(w => w[0]).join(''))}</span><div><b>${esc(t.comercial)}</b><span class="sub">Comercial</span></div></div>
+              <a class="btn btn--ghost btn--block" href="tel:+34${t.comercial_tel.replace(/\s/g, '')}">${I.phone}${esc(t.comercial_tel)}</a>
+              <p class="sub">${I.clock}${esc(t.horario)}</p>
+            </div>
+          </section>
+        </aside>
       </div>`, clientTabs, c.contacto, c.nombre);
+    $$('[data-doc]').forEach(li => li.addEventListener('click', e => { if (e.target.closest('a,button')) return; const [k, n] = li.dataset.doc.split(':'); openDoc(k, n); }));
   }
 
-  function listPage(kind) {
+  /* ---------- Listados ---------- */
+  function listPage(kind, q0) {
     const c = C();
     const cfg = {
-      pedidos: { title: 'Pedidos', desc: 'Cada pedido pasa a «Servido» cuando sale su albarán y a «Facturado» cuando entra en una factura.', rows: c.pedidos, states: ['Todos', 'Pendiente de servir', 'Servido', 'Facturado'] },
-      albaranes: { title: 'Albaranes', desc: 'Un albarán por cada entrega. Descárgalos en PDF.', rows: c.albaranes, states: ['Todos', 'Sin facturar', 'Facturado'] },
-      facturas: { title: 'Facturas', desc: 'Tus facturas agrupan los albaranes de cada quincena.', rows: c.facturas, states: ['Todas', 'Pendiente', 'Vencida', 'Pagada'] }
+      pedidos: { title: 'Pedidos', desc: 'Un pedido pasa a «Servido» cuando sale su albarán y a «Facturado» cuando entra en una factura.', rows: c.pedidos, states: ['Todos', 'Pendiente de servir', 'Servido', 'Facturado'], ph: 'Buscar por número o producto' },
+      albaranes: { title: 'Albaranes', desc: 'Un albarán por cada entrega, con el peso y los productos servidos.', rows: c.albaranes, states: ['Todos', 'Sin facturar', 'Facturado'], ph: 'Buscar por número o producto' },
+      facturas: { title: 'Facturas', desc: 'Cada factura agrupa los albaranes de una quincena.', rows: c.facturas, states: ['Todas', 'Pendiente', 'Vencida', 'Pagada'], ph: 'Buscar por número de factura' }
     }[kind];
-    const st = { q: '', estado: cfg.states[0], year: '2026', sel: new Set() };
+    const pre = q0.get('estado');
+    const st = { q: '', estado: cfg.states.includes(pre) ? pre : cfg.states[0], year: '2026', sel: new Set() };
+    const sel = kind !== 'pedidos';
     shell(kind, `
       <div class="head"><div><h1>${cfg.title}</h1><p>${cfg.desc}</p></div></div>
       <section class="card" aria-label="${cfg.title}">
         <div class="toolbar">
-          <div class="search">${I.search}<input type="search" id="q" placeholder="Buscar por número${kind === 'pedidos' ? ' o producto' : ''}" aria-label="Buscar"></div>
+          <div class="search">${I.search}<input type="search" id="q" placeholder="${cfg.ph}" aria-label="${cfg.ph}"></div>
           <select id="year" aria-label="Año"><option>2026</option><option>2025</option></select>
-          <div class="chips" role="group" aria-label="Filtrar por estado">${cfg.states.map((s, i) => `<button type="button" class="chip" aria-pressed="${i === 0}" data-s="${s}">${s}</button>`).join('')}</div>
+          <div class="chips" role="group" aria-label="Filtrar por estado">${cfg.states.map(s => `<button type="button" class="chip" aria-pressed="${s === st.estado}" data-s="${s}">${s}</button>`).join('')}</div>
         </div>
-        ${kind !== 'pedidos' ? `<div class="bulk" id="bulk" hidden><span id="bulk-n"></span><button class="btn btn--sm" id="bulk-dl">${I.down}Descargar seleccionados</button></div>` : ''}
+        <div class="sumbar" id="sum" aria-live="polite"></div>
+        ${sel ? `<div class="bulk" id="bulk" hidden><span id="bulk-n"></span><div><button class="btn btn--sm btn--ghost-dark" id="bulk-x">Quitar selección</button><button class="btn btn--sm" id="bulk-dl">${I.down}Descargar en PDF</button></div></div>` : ''}
         <div id="tbl"></div>
       </section>`, clientTabs, c.contacto, c.nombre);
 
     const stateOf = r => kind === 'albaranes' ? (r.factura ? 'Facturado' : 'Sin facturar') : r.estado;
-    const draw = () => {
-      const q = st.q.toLowerCase();
-      const rows = cfg.rows.filter(r => r.fecha.startsWith(st.year)
+    const linesOf = r => r.lineas || [];
+    const filtered = () => {
+      const q = st.q.toLowerCase().trim();
+      return cfg.rows.filter(r => r.fecha.startsWith(st.year)
         && (st.estado === cfg.states[0] || stateOf(r) === st.estado)
-        && (!q || r.numero.toLowerCase().includes(q) || (r.lineas || []).some(l => l.producto.toLowerCase().includes(q))));
-      if (!rows.length) { $('#tbl').innerHTML = `<p class="empty">No hay ${kind} con estos filtros.</p>`; say('Sin resultados'); return; }
-      const head = {
-        pedidos: ['Pedido', 'Fecha', 'Productos', 'Estado', 'Importe'],
-        albaranes: ['Albarán', 'Fecha', 'Pedido', 'Peso', 'Factura', 'Importe'],
-        facturas: ['Factura', 'Fecha', 'Vencimiento', 'Albaranes', 'Estado', 'Importe']
-      }[kind];
-      const cells = r => ({
-        pedidos: () => [`<button class="row-link" data-open="${r.numero}">${r.numero}</button>`, fecha(r.fecha), r.lineas.length + ' productos', badge(r.estado), eur(r.total)],
-        albaranes: () => [`<button class="row-link" data-open="${r.numero}">${r.numero}</button>`, fecha(r.fecha), r.pedido, kg(r.kg), r.factura ? r.factura : badge('Sin facturar'), eur(r.total)],
-        facturas: () => [`<button class="row-link" data-open="${r.numero}">${r.numero}</button>`, fecha(r.fecha), fecha(r.vencimiento), r.albaranes.length + ' albaranes', badge(r.estado), eur(r.total)]
-      }[kind])();
-      const hideM = ['Productos', 'Pedido', 'Factura', 'Vencimiento', 'Albaranes', 'Peso'];
-      $('#tbl').innerHTML = `<table class="resp"><thead><tr>${kind !== 'pedidos' ? '<th class="sel"><span class="sr-only">Seleccionar</span></th>' : ''}${head.map((h, i) => `<th${i === head.length - 1 ? ' class="num"' : ''}>${h}</th>`).join('')}<th><span class="sr-only">Acciones</span></th></tr></thead>
-        <tbody>${rows.map(r => `<tr>${kind !== 'pedidos' ? `<td class="sel"><input type="checkbox" class="check" data-sel="${r.numero}" aria-label="Seleccionar ${r.numero}"${st.sel.has(r.numero) ? ' checked' : ''}></td>` : ''}${cells(r).map((v, i) => `<td class="${[i === head.length - 1 ? 'num' : '', i > 0 && hideM.includes(head[i]) ? 'hide-m' : '', i === 0 ? 'first' : ''].join(' ').trim()}">${v}</td>`).join('')}
-          <td class="act"><button class="icon-btn" data-open="${r.numero}" aria-label="Ver ${r.numero}">${I.eye}</button>${kind !== 'pedidos' ? `<a class="icon-btn" href="${pdfUrl(r.numero)}" download aria-label="Descargar ${r.numero} en PDF">${I.down}</a>` : ''}</td></tr>`).join('')}</tbody></table>`;
+        && (!q || r.numero.toLowerCase().includes(q) || linesOf(r).some(l => l.producto.toLowerCase().includes(q))));
+    };
+    const head = {
+      pedidos: ['Pedido', 'Fecha', 'Productos', 'Estado', 'Importe'],
+      albaranes: ['Albarán', 'Fecha', 'Pedido', 'Peso', 'Factura', 'Importe'],
+      facturas: ['Factura', 'Fecha', 'Vencimiento', 'Albaranes', 'Estado', 'Importe']
+    }[kind];
+    const ref = (k, n) => `<button type="button" class="ref" data-go="${k}:${n}">${n}</button>`;
+    const cells = r => ({
+      pedidos: () => [`<b>${r.numero}</b>`, fecha(r.fecha), `<span class="clip">${esc(productos(r))}</span>`, badge(r.estado), eur(r.total)],
+      albaranes: () => [`<b>${r.numero}</b>`, fecha(r.fecha), ref('pedidos', r.pedido), kg(r.kg), r.factura ? ref('facturas', r.factura) : badge('Sin facturar'), eur(r.total)],
+      facturas: () => [`<b>${r.numero}</b>`, fecha(r.fecha), `${fecha(r.vencimiento)}<span class="sub ${r.estado === 'Vencida' ? 'is-bad' : ''}">${r.estado === 'Pagada' ? '' : vencTxt(r)}</span>`, plural(r.albaranes.length, 'albarán', 'albaranes'), badge(r.estado), eur(r.total)]
+    }[kind])();
+    const hideM = ['Productos', 'Pedido', 'Factura', 'Albaranes', 'Peso', 'Vencimiento'];
+
+    const draw = () => {
+      const rows = filtered();
+      const tot = rows.reduce((s, r) => s + r.total, 0);
+      $('#sum').innerHTML = kind === 'facturas'
+        ? `<span>${plural(rows.length, 'factura')}</span><span>Pendiente <b>${eur(rows.filter(r => r.estado === 'Pendiente').reduce((s, r) => s + r.total, 0))}</b></span><span>Vencido <b class="${rows.some(r => r.estado === 'Vencida') ? 'is-bad' : ''}">${eur(rows.filter(r => r.estado === 'Vencida').reduce((s, r) => s + r.total, 0))}</b></span><span>Total <b>${eur(tot)}</b></span>`
+        : kind === 'albaranes'
+          ? `<span>${plural(rows.length, 'albarán', 'albaranes')}</span><span>Peso <b>${kg(rows.reduce((s, r) => s + r.kg, 0))}</b></span><span>Total <b>${eur(tot)}</b></span>`
+          : `<span>${plural(rows.length, 'pedido')}</span><span>Total <b>${eur(tot)}</b></span>`;
+      if (!rows.length) { $('#tbl').innerHTML = `<div class="empty">${I.search}<p>No hay ${kind} con estos filtros.</p><button class="btn btn--ghost btn--sm" id="reset">Quitar filtros</button></div>`; $('#reset').onclick = () => { st.q = ''; $('#q').value = ''; st.estado = cfg.states[0]; $$('.chip').forEach(x => x.setAttribute('aria-pressed', x.dataset.s === st.estado)); draw(); }; say('Sin resultados'); return; }
+      let last = '';
+      const body = rows.map(r => {
+        const m = mes(r.fecha); const g = m !== last ? `<tr class="grp"><th colspan="${head.length + (sel ? 2 : 1)}" scope="colgroup">${m}</th></tr>` : ''; last = m;
+        return g + `<tr data-row="${r.numero}"${st.sel.has(r.numero) ? ' class="is-sel"' : ''}>${sel ? `<td class="sel"><input type="checkbox" class="check" data-sel="${r.numero}" aria-label="Seleccionar ${r.numero}"${st.sel.has(r.numero) ? ' checked' : ''}></td>` : ''}${cells(r).map((v, i) => `<td class="${[i === head.length - 1 ? 'num' : '', i > 0 && hideM.includes(head[i]) ? 'hide-m' : '', i === 0 ? 'first' : ''].join(' ').trim()}">${v}</td>`).join('')}
+          <td class="act"><button class="icon-btn" data-open="${r.numero}" aria-label="Ver ${r.numero}">${I.eye}</button>${sel ? `<a class="icon-btn" href="${pdfUrl(r.numero)}" download aria-label="Descargar ${r.numero} en PDF">${I.down}</a>` : ''}</td></tr>`;
+      }).join('');
+      $('#tbl').innerHTML = `<table class="resp"><thead><tr>${sel ? `<th class="sel"><input type="checkbox" class="check" id="sel-all" aria-label="Seleccionar todos"></th>` : ''}${head.map((h, i) => `<th scope="col"${i === head.length - 1 ? ' class="num"' : ''}>${h}</th>`).join('')}<th><span class="sr-only">Acciones</span></th></tr></thead><tbody>${body}</tbody></table>`;
+      const all = $('#sel-all'); if (all) { const ids = rows.map(r => r.numero); all.checked = ids.length && ids.every(i => st.sel.has(i)); all.indeterminate = !all.checked && ids.some(i => st.sel.has(i)); all.onchange = () => { ids.forEach(i => all.checked ? st.sel.add(i) : st.sel.delete(i)); draw(); syncBulk(); }; }
       say(rows.length + ' resultados');
     };
-    const syncBulk = () => { const b = $('#bulk'); if (!b) return; b.hidden = !st.sel.size; $('#bulk-n').textContent = `${st.sel.size} seleccionado${st.sel.size === 1 ? '' : 's'}`; };
+    const syncBulk = () => { const b = $('#bulk'); if (!b) return; b.hidden = !st.sel.size; $('#bulk-n').textContent = `${plural(st.sel.size, 'documento seleccionado', 'documentos seleccionados')}`; };
     $('#q').addEventListener('input', e => { st.q = e.target.value; draw(); });
     $('#year').addEventListener('change', e => { st.year = e.target.value; draw(); });
     $$('.chip').forEach(ch => ch.addEventListener('click', () => { $$('.chip').forEach(x => x.setAttribute('aria-pressed', x === ch)); st.estado = ch.dataset.s; draw(); }));
-    $('#tbl').addEventListener('click', e => { const o = e.target.closest('[data-open]'); if (o) openDoc(kind, o.dataset.open); });
-    $('#tbl').addEventListener('change', e => { const s = e.target.closest('[data-sel]'); if (!s) return; s.checked ? st.sel.add(s.dataset.sel) : st.sel.delete(s.dataset.sel); syncBulk(); });
-    const bd = $('#bulk-dl'); if (bd) bd.onclick = () => { [...st.sel].forEach((n, i) => setTimeout(() => { const a = document.createElement('a'); a.href = pdfUrl(n); a.download = ''; document.body.append(a); a.click(); a.remove(); }, i * 250)); toast(`Descargando ${st.sel.size} documentos`); };
+    $('#tbl').addEventListener('click', e => {
+      const g = e.target.closest('[data-go]'); if (g) { const [k, n] = g.dataset.go.split(':'); openDoc(k, n); return; }
+      const o = e.target.closest('[data-open]'); if (o) { openDoc(kind, o.dataset.open); return; }
+      if (e.target.closest('a,button,input')) return;
+      const tr = e.target.closest('tr[data-row]'); if (tr) openDoc(kind, tr.dataset.row);
+    });
+    $('#tbl').addEventListener('change', e => { const s = e.target.closest('[data-sel]'); if (!s) return; s.checked ? st.sel.add(s.dataset.sel) : st.sel.delete(s.dataset.sel); s.closest('tr').classList.toggle('is-sel', s.checked); syncBulk(); const all = $('#sel-all'); if (all) { const ids = filtered().map(r => r.numero); all.checked = ids.every(i => st.sel.has(i)); all.indeterminate = !all.checked && ids.some(i => st.sel.has(i)); } });
+    const bx = $('#bulk-x'); if (bx) bx.onclick = () => { st.sel.clear(); draw(); syncBulk(); };
+    const bd = $('#bulk-dl'); if (bd) bd.onclick = () => { [...st.sel].forEach((n, i) => setTimeout(() => { const a = document.createElement('a'); a.href = pdfUrl(n); a.download = ''; document.body.append(a); a.click(); a.remove(); }, i * 250)); toast(`Descargando ${plural(st.sel.size, 'documento')}`); };
     draw();
   }
 
-  function openDoc(kind, num) {
-    const c = C();
-    const r = c[kind].find(x => x.numero === num);
-    const lines = r.lineas || (kind === 'facturas' ? r.albaranes.flatMap(a => c.albaranes.find(x => x.numero === a)?.lineas || []) : []);
-    const title = { pedidos: 'Pedido', albaranes: 'Albarán', facturas: 'Factura' }[kind];
-    const meta = {
-      pedidos: () => [['Fecha', fecha(r.fecha)], ['Estado', r.estado], ['Albarán', r.albaran || 'Pendiente'], ['Factura', r.factura || 'Pendiente']],
-      albaranes: () => [['Fecha', fecha(r.fecha)], ['Pedido', r.pedido], ['Peso total', kg(r.kg)], ['Factura', r.factura || 'Sin facturar']],
-      facturas: () => [['Fecha', fecha(r.fecha)], ['Vencimiento', fecha(r.vencimiento)], ['Estado', r.estado], ['Albaranes', r.albaranes.join(', ')]]
-    }[kind]();
-    const steps = ['Pedido recibido', 'Servido', 'Facturado'];
-    const idx = kind === 'pedidos' ? ({ 'Pendiente de servir': 0, Servido: 1, Facturado: 2 })[r.estado] : -1;
+  /* ---------- Panel lateral ---------- */
+  function drawer(title, sub, body, foot) {
     const wrap = document.createElement('div');
     wrap.className = 'drawer'; wrap.setAttribute('role', 'dialog'); wrap.setAttribute('aria-modal', 'true'); wrap.setAttribute('aria-labelledby', 'dr-t');
     wrap.innerHTML = `<div class="drawer__panel">
-      <div class="drawer__head"><div><h2 id="dr-t">${title} ${esc(r.numero)}</h2><p>${esc(T().nombre)} · ${esc(c.nombre)}</p></div><button class="icon-btn" data-close aria-label="Cerrar">${I.x}</button></div>
-      <div class="drawer__body">
-        ${kind !== 'albaranes' ? `<div>${badge(kind === 'pedidos' ? r.estado : r.estado)}</div>` : ''}
-        <dl class="meta">${meta.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
-        ${kind === 'pedidos' ? `<ol class="timeline">${steps.map((s, i) => `<li class="${i <= Math.max(idx, 0) ? 'done' : ''}">${s}</li>`).join('')}</ol>` : ''}
-        <table class="lines"><thead><tr><th>Producto</th><th class="num">Cantidad</th><th class="num">Precio</th><th class="num">Importe</th></tr></thead>
-          <tbody>${lines.map(l => `<tr><td>${esc(l.producto)}</td><td class="num">${kg(l.kg)}</td><td class="num">${eur(l.precio)}/kg</td><td class="num">${eur(l.importe)}</td></tr>`).join('')}</tbody></table>
-        <div class="totals"><div><span>Base imponible</span><span>${eur(r.base)}</span></div><div><span>IVA 10 %</span><span>${eur(r.iva)}</span></div><div class="t"><span>Total</span><span>${eur(r.total)}</span></div></div>
-      </div>
-      <div class="drawer__foot">${kind !== 'pedidos' ? `<a class="btn btn--brand" href="${pdfUrl(r.numero)}" download>${I.down}Descargar PDF</a><a class="btn btn--ghost" href="${pdfUrl(r.numero)}" target="_blank" rel="noopener">${I.eye}Ver</a>`
-        : (r.albaran ? `<button class="btn btn--ghost" data-go="albaranes:${r.albaran}">${I.truck}Ver albarán ${r.albaran}</button>${r.factura ? `<button class="btn btn--ghost" data-go="facturas:${r.factura}">${I.doc}Ver factura ${r.factura}</button>` : ''}` : `<p class="hint" style="margin:0">El albarán estará disponible cuando se sirva el pedido.</p>`)}</div>
+      <div class="drawer__head"><div><h2 id="dr-t">${title}</h2><p>${sub}</p></div><button class="icon-btn" data-close aria-label="Cerrar">${I.x}</button></div>
+      <div class="drawer__body">${body}</div>
+      ${foot ? `<div class="drawer__foot">${foot}</div>` : ''}
     </div>`;
     const prev = document.activeElement;
+    $$('.drawer').forEach(d => d.remove());
     document.body.append(wrap); document.body.style.overflow = 'hidden';
     requestAnimationFrame(() => wrap.classList.add('open'));
     wrap.querySelector('[data-close]').focus();
-    const close = () => { wrap.classList.remove('open'); document.body.style.overflow = ''; setTimeout(() => wrap.remove(), 250); document.removeEventListener('keydown', onKey); prev && prev.focus(); };
+    const close = () => { wrap.classList.remove('open'); document.body.style.overflow = ''; setTimeout(() => wrap.remove(), 250); document.removeEventListener('keydown', onKey); prev && prev.isConnected && prev.focus(); };
     const onKey = e => {
       if (e.key === 'Escape') close();
       if (e.key === 'Tab') { const f = $$('a,button', wrap); const i = f.indexOf(document.activeElement); if (e.shiftKey && i <= 0) { e.preventDefault(); f[f.length - 1].focus(); } else if (!e.shiftKey && i === f.length - 1) { e.preventDefault(); f[0].focus(); } }
     };
     document.addEventListener('keydown', onKey);
-    wrap.addEventListener('click', e => {
-      if (e.target === wrap || e.target.closest('[data-close]')) close();
-      const g = e.target.closest('[data-go]'); if (g) { const [k, n] = g.dataset.go.split(':'); close(); location.hash = '#/' + k; setTimeout(() => openDoc(k, n), 300); }
-    });
+    wrap.addEventListener('click', e => { if (e.target === wrap || e.target.closest('[data-close]')) close(); });
+    return { wrap, close };
   }
 
-  function perfil() {
+  function openDoc(kind, num) {
     const c = C();
+    const r = c[kind].find(x => x.numero === num); if (!r) return;
+    const lines = r.lineas || (kind === 'facturas' ? r.albaranes.flatMap(a => c.albaranes.find(x => x.numero === a)?.lineas || []) : []);
+    const title = { pedidos: 'Pedido', albaranes: 'Albarán', facturas: 'Factura' }[kind];
+    const ref = (k, n) => n ? `<button type="button" class="ref" data-go="${k}:${n}">${n}</button>` : '<span class="muted">Pendiente</span>';
+    const meta = {
+      pedidos: () => [['Fecha', fecha(r.fecha)], ['Productos', plural(r.lineas.length, 'producto')], ['Albarán', ref('albaranes', r.albaran)], ['Factura', ref('facturas', r.factura)]],
+      albaranes: () => [['Fecha', fecha(r.fecha)], ['Peso total', kg(r.kg)], ['Pedido', ref('pedidos', r.pedido)], ['Factura', r.factura ? ref('facturas', r.factura) : '<span class="muted">Sin facturar</span>']],
+      facturas: () => [['Fecha', fecha(r.fecha)], ['Vencimiento', `${fecha(r.vencimiento)}${r.estado !== 'Pagada' ? `<span class="sub ${r.estado === 'Vencida' ? 'is-bad' : ''}">${vencTxt(r)}</span>` : ''}`], ['Albaranes', r.albaranes.map(a => ref('albaranes', a)).join(' ')], ['Base + IVA', `${eur(r.base)} + ${eur(r.iva)}`]]
+    }[kind]();
+    const steps = ['Pedido recibido', 'Servido', 'Facturado'];
+    const idx = kind === 'pedidos' ? ({ 'Pendiente de servir': 0, Servido: 1, Facturado: 2 })[r.estado] : -1;
+    const body = `
+      <div class="doc-top"><div>${kind === 'albaranes' ? badge(r.factura ? 'Facturado' : 'Sin facturar') : badge(r.estado)}</div><strong class="doc-total">${eur(r.total)}</strong></div>
+      ${kind === 'pedidos' ? `<ol class="steps-h">${steps.map((s, i) => `<li class="${i <= idx ? 'done' : ''}${i === idx ? ' now' : ''}"><span></span>${s}</li>`).join('')}</ol>` : ''}
+      <dl class="meta">${meta.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
+      ${kind === 'facturas' && r.estado !== 'Pagada' ? `<section class="pay-block"><h3>Cómo pagar esta factura</h3>${payBox(r.numero)}</section>` : ''}
+      <div class="lines-wrap"><table class="lines"><thead><tr><th scope="col">Producto</th><th scope="col" class="num">Cantidad</th><th scope="col" class="num">Precio</th><th scope="col" class="num">Importe</th></tr></thead>
+        <tbody>${lines.map(l => `<tr><td>${esc(l.producto)}</td><td class="num">${kg(l.kg)}</td><td class="num">${eur(l.precio)}/kg</td><td class="num">${eur(l.importe)}</td></tr>`).join('')}</tbody></table></div>
+      <div class="totals"><div><span>Base imponible</span><span>${eur(r.base)}</span></div><div><span>IVA 10 %</span><span>${eur(r.iva)}</span></div><div class="t"><span>Total</span><span>${eur(r.total)}</span></div></div>`;
+    const foot = kind !== 'pedidos'
+      ? `<a class="btn btn--brand" href="${pdfUrl(r.numero)}" download>${I.down}Descargar PDF</a><a class="btn btn--ghost" href="${pdfUrl(r.numero)}" target="_blank" rel="noopener">${I.eye}Abrir</a>`
+      : (r.albaran ? `<button class="btn btn--ghost" data-go="albaranes:${r.albaran}">${I.truck}Ver albarán</button>${r.factura ? `<button class="btn btn--ghost" data-go="facturas:${r.factura}">${I.doc}Ver factura</button>` : ''}` : `<p class="hint" style="margin:0">El albarán estará disponible cuando se sirva el pedido.</p>`);
+    const { wrap, close } = drawer(`${title} ${esc(r.numero)}`, `${esc(T().nombre)} · ${esc(c.nombre)}`, body, foot);
+    wrap.addEventListener('click', e => { const g = e.target.closest('[data-go]'); if (g) { const [k, n] = g.dataset.go.split(':'); openDoc(k, n); } });
+  }
+
+  /* ---------- Perfil ---------- */
+  function perfil() {
+    const c = C(), t = T();
     shell('perfil', `
-      <div class="head"><div><h1>Perfil</h1><p>Tus datos tal y como constan en ${esc(T().nombre)}.</p></div></div>
-      <div class="grid2">
-        <section class="card"><div class="card__head"><h3>Datos de facturación</h3></div>
-          <ul class="list">${[['Empresa', c.nombre], ['NIF', c.nif], ['Contacto', c.contacto], ['Email de acceso', c.email]].map(([k, v]) => `<li><span class="sub" style="margin:0">${k}</span><b>${esc(v)}</b></li>`).join('')}</ul>
-        </section>
-        <section class="card"><div class="card__head"><h3>¿Algún dato no es correcto?</h3></div>
-          <div style="padding:1.35rem;display:grid;gap:1rem"><p style="color:var(--muted)">Tus datos se actualizan desde el programa de facturación de ${esc(T().nombre)}. Si algo ha cambiado, avísanos y lo corregimos.</p>
-          <a class="btn btn--ghost" href="mailto:${esc(T().email)}" style="justify-self:start">${I.mail}Escribir a ${esc(T().nombre)}</a></div>
-        </section>
+      <div class="head"><div><h1>Perfil</h1><p>Tus datos tal y como constan en ${esc(t.nombre)}.</p></div></div>
+      <div class="dash">
+        <div class="dash__main">
+          <section class="card"><div class="card__head"><h3>Datos de facturación</h3></div>
+            <dl class="kv">${[['Empresa', c.nombre], ['NIF', c.nif], ['Persona de contacto', c.contacto], ['Email de acceso', c.email]].map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
+            <div class="card__foot"><p class="muted">¿Algún dato no es correcto? Se actualizan desde el programa de facturación de ${esc(t.nombre)}.</p><a class="btn btn--ghost btn--sm" href="mailto:${esc(t.email)}?subject=${encodeURIComponent('Corrección de datos · ' + c.nombre)}">${I.mail}Pedir un cambio</a></div>
+          </section>
+        </div>
+        <aside class="dash__side">
+          <section class="card"><div class="card__head"><h3>Cómo pagar</h3></div><div class="card__pad">${payBox('Nº de factura')}</div></section>
+          <section class="card"><div class="card__head"><h3>${esc(t.nombre)}</h3></div>
+            <div class="card__pad contact"><p class="sub">${esc(t.direccion)}</p><a class="btn btn--ghost btn--block" href="tel:+34${t.telefono.replace(/\s/g, '')}">${I.phone}${esc(t.telefono)}</a><p class="sub">${I.clock}${esc(t.horario)}</p></div>
+          </section>
+        </aside>
       </div>`, clientTabs, c.contacto, c.nombre);
   }
 
@@ -305,37 +417,70 @@
   const panelTabs = [['panel/clientes', 'Clientes', I.users], ['panel/actividad', 'Actividad', I.chart]];
 
   function panelClientes() {
-    const cs = T().clientes;
+    const t = T(), cs = t.clientes;
     const withAccess = cs.filter(c => c.ultimo_acceso);
-    const pend = cs.reduce((s, c) => s + c.facturas.filter(f => f.estado !== 'Pagada').reduce((a, f) => a + f.total, 0), 0);
+    const pendOf = c => c.facturas.filter(f => f.estado !== 'Pagada');
+    const vencOf = c => c.facturas.filter(f => f.estado === 'Vencida');
+    const pend = cs.reduce((s, c) => s + pendOf(c).reduce((a, f) => a + f.total, 0), 0);
+    const venc = cs.reduce((s, c) => s + vencOf(c).reduce((a, f) => a + f.total, 0), 0);
+    const sinInv = cs.filter(c => c.email && !c.ultimo_acceso).length;
     shell('panel/clientes', `
-      <div class="head"><div><h1>Clientes</h1><p>Los clientes se crean solos desde Mercagestion. Aquí ves quién usa el área de clientes.</p></div>
-        <button class="btn btn--brand" id="invite-all">${I.send}Invitar a los que no han entrado</button></div>
+      <div class="head"><div><h1>Clientes</h1><p>Se crean solos desde Mercagestion. Aquí ves quién usa el área de clientes y lo que tiene pendiente.</p></div>
+        ${sinInv ? `<button class="btn btn--brand" data-toast="Invitación enviada a ${plural(sinInv, 'cliente')}">${I.send}Invitar a los que no han entrado (${sinInv})</button>` : ''}</div>
       <div class="stats">
-        <div class="stat stat--brand"><span>Clientes</span><strong>${cs.length}</strong><small>sincronizados con Mercagestion</small></div>
-        <div class="stat"><span>Han entrado alguna vez</span><strong>${withAccess.length}</strong><small>${Math.round(withAccess.length / cs.length * 100)} % del total</small></div>
+        <div class="stat stat--brand"><span>Usan el área de clientes</span><strong>${withAccess.length} <small class="of">de ${cs.length}</small></strong><small>${Math.round(withAccess.length / cs.length * 100)} % de tus clientes</small></div>
         <div class="stat"><span>Descargas este mes</span><strong>${cs.reduce((s, c) => s + c.descargas, 0)}</strong><small>facturas y albaranes</small></div>
         <div class="stat"><span>Pendiente de cobro</span><strong>${eur(pend)}</strong><small>entre todos los clientes</small></div>
+        <div class="stat"><span>Vencido</span><strong class="${venc ? 'is-bad' : ''}">${eur(venc)}</strong><small>${plural(cs.filter(c => vencOf(c).length).length, 'cliente')}</small></div>
       </div>
       <section class="card" aria-label="Listado de clientes">
-        <div class="toolbar"><div class="search">${I.search}<input type="search" id="q" placeholder="Buscar cliente o email" aria-label="Buscar cliente"></div></div>
+        <div class="toolbar">
+          <div class="search">${I.search}<input type="search" id="q" placeholder="Buscar cliente o email" aria-label="Buscar cliente o email"></div>
+          <div class="chips" role="group" aria-label="Filtrar clientes">${[['todos', 'Todos'], ['vencido', 'Con vencido'], ['nunca', 'Sin acceso']].map(([k, l], i) => `<button type="button" class="chip" data-f="${k}" aria-pressed="${i === 0}">${l}</button>`).join('')}</div>
+        </div>
         <div id="tbl"></div>
-      </section>`, panelTabs, 'Equipo de ' + T().nombre, 'Administración');
-    const draw = q => {
-      const rows = cs.filter(c => !q || (c.nombre + c.email).toLowerCase().includes(q.toLowerCase()));
-      $('#tbl').innerHTML = `<table class="resp"><thead><tr><th>Cliente</th><th>Email de acceso</th><th>Último acceso</th><th>Facturas pendientes</th><th class="num">Documentos</th><th><span class="sr-only">Acciones</span></th></tr></thead><tbody>
-        ${rows.map(c => { const p = c.facturas.filter(f => f.estado !== 'Pagada'); return `<tr>
-          <td><b style="font-weight:500">${esc(c.nombre)}</b><span class="sub">${esc(c.contacto)}</span></td>
-          <td data-l="Email">${c.email ? esc(c.email) : badge('Sin email en Mercagestion')}</td>
-          <td data-l="Último acceso">${c.ultimo_acceso ? fecha(c.ultimo_acceso) : badge('Nunca')}</td>
-          <td data-l="Pendiente">${p.length ? `${p.length} · ${eur(p.reduce((s, f) => s + f.total, 0))}` : '—'}</td>
-          <td class="num" data-l="Documentos">${c.albaranes.length + c.facturas.length}</td>
-          <td class="act">${c.email ? `<button class="btn btn--ghost btn--sm" data-inv="${esc(c.nombre)}">${I.send}${c.ultimo_acceso ? 'Reenviar acceso' : 'Invitar'}</button>` : ''}</td></tr>`; }).join('')}
+      </section>`, panelTabs, 'Equipo de ' + t.nombre, 'Administración');
+    const st = { q: '', f: 'todos' };
+    const draw = () => {
+      const rows = cs.filter(c => (!st.q || (c.nombre + c.email + c.contacto).toLowerCase().includes(st.q.toLowerCase()))
+        && (st.f === 'todos' || (st.f === 'vencido' ? vencOf(c).length : !c.ultimo_acceso)));
+      if (!rows.length) { $('#tbl').innerHTML = '<div class="empty"><p>No hay clientes con estos filtros.</p></div>'; return; }
+      $('#tbl').innerHTML = `<table class="resp resp--cli"><thead><tr><th scope="col">Cliente</th><th scope="col">Último acceso</th><th scope="col" class="num">Pendiente</th><th scope="col" class="num">Vencido</th><th><span class="sr-only">Acciones</span></th></tr></thead><tbody>
+        ${rows.map(c => { const p = pendOf(c), v = vencOf(c); return `<tr data-cli="${c.id}">
+          <td class="first"><b>${esc(c.nombre)}</b><span class="sub">${c.email ? esc(c.email) : '<span class="is-warn">Sin email en Mercagestion</span>'}</span></td>
+          <td class="c-acc">${c.ultimo_acceso ? `${fecha(c.ultimo_acceso)}<span class="sub">${plural(c.descargas, 'descarga')} este mes</span>` : badge('Nunca')}</td>
+          <td class="num c-pen">${p.length ? `${eur(p.reduce((s, f) => s + f.total, 0))}<span class="sub">${plural(p.length, 'factura')}</span>` : '<span class="muted">—</span>'}</td>
+          <td class="num c-ven">${v.length ? `<b class="is-bad">${eur(v.reduce((s, f) => s + f.total, 0))}</b>` : '<span class="muted">—</span>'}</td>
+          <td class="act">${c.email ? `<button class="btn btn--ghost btn--sm" data-toast="${c.ultimo_acceso ? 'Acceso reenviado a' : 'Invitación enviada a'} ${esc(c.nombre)}">${I.send}${c.ultimo_acceso ? 'Reenviar acceso' : 'Invitar'}</button>` : ''}<span class="chev" aria-hidden="true">${I.chev}</span></td></tr>`; }).join('')}
       </tbody></table>`;
     };
-    $('#q').addEventListener('input', e => draw(e.target.value)); draw('');
-    $('#tbl').addEventListener('click', e => { const b = e.target.closest('[data-inv]'); if (b) toast(`Invitación enviada a ${b.dataset.inv}`); });
-    $('#invite-all').onclick = () => toast(`Invitación enviada a ${cs.filter(c => c.email && !c.ultimo_acceso).length} clientes`);
+    $('#q').addEventListener('input', e => { st.q = e.target.value; draw(); });
+    $$('.chip[data-f]').forEach(ch => ch.onclick = () => { $$('.chip[data-f]').forEach(x => x.setAttribute('aria-pressed', x === ch)); st.f = ch.dataset.f; draw(); });
+    $('#tbl').addEventListener('click', e => { if (e.target.closest('a,button')) return; const tr = e.target.closest('tr[data-cli]'); if (tr) openClient(tr.dataset.cli); });
+    draw();
+  }
+
+  function openClient(id) {
+    const c = T().clientes.find(x => x.id === id);
+    const pend = c.facturas.filter(f => f.estado !== 'Pagada');
+    const A = buildActivity(); const ev = A.ev.filter(e => e.c.id === id).slice(0, 6);
+    const icon = { acceso: I.user, factura: I.doc, albaran: I.truck, invitacion: I.send };
+    const body = `
+      <dl class="meta">
+        <div><dt>Contacto</dt><dd>${esc(c.contacto)}</dd></div>
+        <div><dt>NIF</dt><dd>${esc(c.nif)}</dd></div>
+        <div><dt>Email de acceso</dt><dd>${c.email ? esc(c.email) : '<span class="is-warn">Falta en Mercagestion</span>'}</dd></div>
+        <div><dt>Último acceso</dt><dd>${c.ultimo_acceso ? fecha(c.ultimo_acceso) : 'Nunca'}</dd></div>
+      </dl>
+      <section><h3 class="dr-h">Facturas sin pagar</h3>
+        ${pend.length ? `<ul class="list list--flat">${pend.map(f => `<li><div><b>${f.numero}</b><span class="sub">${vencTxt(f)}${A.vistas.has(f.numero) ? ' · descargada por el cliente' : ''}</span></div><div class="row-r">${badge(f.estado)}<b class="amt">${eur(f.total)}</b></div></li>`).join('')}</ul>` : '<p class="muted">Está al día.</p>'}
+      </section>
+      <section><h3 class="dr-h">Última actividad</h3>
+        ${ev.length ? `<ul class="list list--flat">${ev.map(e => `<li><div class="ev-l"><span class="ev-ico ev-${e.tipo}">${icon[e.tipo]}</span><div><b>${e.txt}</b><span class="sub">${e.doc ? e.doc + ' · ' : ''}${fecha(e.d)}, ${e.h}</span></div></div></li>`).join('')}</ul>` : '<p class="muted">Todavía no ha entrado en el área de clientes.</p>'}
+      </section>`;
+    const foot = `${c.email ? `<button class="btn btn--brand" data-toast="${c.ultimo_acceso ? 'Acceso reenviado a' : 'Invitación enviada a'} ${esc(c.nombre)}">${I.send}${c.ultimo_acceso ? 'Reenviar acceso' : 'Enviar invitación'}</button>` : ''}${pend.length ? `<button class="btn btn--ghost" data-toast="Recordatorio de pago enviado a ${esc(c.nombre)}">${I.mail}Recordar pago</button>` : ''}`;
+    const { wrap } = drawer(esc(c.nombre), `Cliente de ${esc(T().nombre)}`, body, foot);
+    wrap.addEventListener('click', e => { const b = e.target.closest('[data-toast]'); if (b) toast(b.dataset.toast); });
   }
 
   /* Actividad: eventos de demo generados de forma estable a partir de los datos */
@@ -475,7 +620,8 @@
   /* ---------- Rutas ---------- */
   function route() {
     applyBrand();
-    const h = location.hash.replace(/^#\//, '') || '';
+    $$('.drawer').forEach(d => d.remove()); document.body.style.overflow = '';
+    const { path: h, q } = route_();
     if (view === 'panel') {
       if (!h.startsWith('panel/')) { location.replace('#/panel/clientes'); return; }
       ({ 'panel/clientes': panelClientes, 'panel/actividad': panelActividad }[h] || panelClientes)();
@@ -483,11 +629,12 @@
       if (h === 'codigo') loginCode(); else { if (h !== 'acceso') history.replaceState(null, '', '#/acceso'); loginEmail(); }
     } else {
       if (h.startsWith('panel/') || h === 'acceso' || h === 'codigo' || !h) { location.replace('#/inicio'); return; }
-      ({ inicio, pedidos: () => listPage('pedidos'), albaranes: () => listPage('albaranes'), facturas: () => listPage('facturas'), perfil }[h] || inicio)();
+      ({ inicio, pedidos: () => listPage('pedidos', q), albaranes: () => listPage('albaranes', q), facturas: () => listPage('facturas', q), perfil }[h] || inicio)();
     }
     const m = $('#main'); if (m && document.activeElement === document.body) m.focus({ preventScroll: true });
     window.scrollTo(0, 0);
   }
+  if (!app._toastBound) { app._toastBound = true; app.addEventListener('click', e => { const b = e.target.closest('[data-toast]'); if (b && !b.closest('.drawer')) toast(b.dataset.toast); }); }
   window.addEventListener('hashchange', route);
   route();
 })();
