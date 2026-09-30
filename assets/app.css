@@ -509,3 +509,21 @@ textarea:focus-visible,.qty input:focus-visible,.np-add select:focus-visible{out
 .meta dd{overflow-wrap:anywhere}
 .meta > div{min-width:0}
 @media (max-width:380px){.meta{grid-template-columns:minmax(0,1fr)}}
+
+/* Versión sencilla */
+.demo-bar__seg a{display:inline-flex;align-items:center;color:#c4cbd6;text-decoration:none;min-height:36px;padding:0 .85rem;font-size:var(--fs-6)}
+.demo-bar__seg a[aria-current="page"]{background:var(--white);color:var(--ink);font-weight:500}
+.demo-bar__link{color:#c4cbd6;font-size:var(--fs-6);text-underline-offset:3px;min-height:36px;display:inline-flex;align-items:center}
+.demo-bar__link:hover,.demo-bar__seg a:hover{color:var(--white)}
+.demo-bar__seg a[aria-current="page"]:hover{color:var(--ink)}
+.s-tbl td.act{display:flex;gap:.5rem;justify-content:flex-end;align-items:center}
+.s-help{display:flex;gap:.6rem;align-items:flex-start;color:var(--muted);font-size:var(--fs-6)}
+.s-help svg{width:18px;height:18px;flex:none;margin-top:.15rem}
+.s-help a{color:var(--ink);font-weight:500}
+@media (max-width:560px){.s-dl{display:none}}
+.s-shell .main,.s-shell .topbar__in,.s-shell footer.pf{max-width:1040px}
+@media (max-width:900px){
+  table.resp tr.grp{display:block;padding:0;border-top:1px solid var(--line)}
+  table.resp tr.grp th{border-top:0}
+  .s-shell .toolbar{display:grid;grid-template-columns:minmax(0,1fr) auto}
+}
