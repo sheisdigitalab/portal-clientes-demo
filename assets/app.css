@@ -247,3 +247,40 @@ footer.pf{max-width:1280px;margin-inline:auto;padding:0 clamp(1rem, 3vw, 2rem) 2
   .tabs{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,auto));grid-auto-flow:column;justify-content:space-between;overflow:visible;gap:0}
   .tabs a{flex-direction:column;gap:.2rem;min-height:56px;padding:.35rem .4rem;font-size:var(--fs-6);border-radius:8px}
 }
+
+/* ============ Actividad ============ */
+.range{font-size:var(--fs-6);color:var(--text);background:var(--white);border:1px solid var(--line);border-radius:999px;padding:.4rem .85rem}
+.stat strong .of{font-size:var(--fs-5);font-weight:400;letter-spacing:0;opacity:.9}
+.act-grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:1.5rem;align-items:start}
+.act-main,.act-side{display:grid;gap:1.5rem;min-width:0}
+@media (max-width:1080px){.act-grid{grid-template-columns:minmax(0,1fr)}}
+.card__head .sub{font-size:var(--fs-6);color:var(--muted)}
+.card__intro{font-size:var(--fs-6);color:var(--muted);padding:1rem 1.35rem 0}
+.card__foot{padding:1rem 1.35rem;border-top:1px solid var(--line)}
+.chart{display:grid;grid-template-columns:repeat(14,minmax(0,1fr));gap:.4rem;align-items:end;height:190px;padding:1.25rem 1.35rem 1rem}
+.chart__col{display:grid;grid-template-rows:auto 1fr auto;height:100%;align-items:end;justify-items:center;gap:.35rem}
+.chart__bar{width:100%;max-width:28px;border-radius:6px 6px 2px 2px;background:color-mix(in srgb,var(--brand) 28%,white);align-self:end}
+.chart__col.is-today .chart__bar{background:var(--brand)}
+.chart__v{font-size:var(--fs-6);color:var(--muted);font-variant-numeric:tabular-nums}
+.chart__d{font-size:var(--fs-6);color:var(--muted)}
+.chart__col.is-today .chart__d{color:var(--ink);font-weight:600}
+.feed-day h4{margin:0;padding:.75rem 1.35rem;font-size:var(--fs-6);font-weight:500;color:var(--muted);background:var(--paper);border-top:1px solid var(--line)}
+.feed-day:first-child h4{border-top:0}
+.ev-l{display:flex;gap:.85rem;align-items:center;min-width:0}
+.ev-ico{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;flex:none;background:var(--paper);color:var(--ink)}
+.ev-ico svg{width:18px;height:18px}
+.ev-factura{background:color-mix(in srgb,var(--brand) 14%,white);color:var(--ink)}
+.ev-invitacion{background:var(--warn-bg)}
+.ev-t{font-variant-numeric:tabular-nums;white-space:nowrap}
+.doc{font-weight:500;color:var(--ink);white-space:nowrap}
+.list .sub .badge{vertical-align:middle;margin-left:.15rem}
+.side-r{display:grid;justify-items:end;gap:.35rem;text-align:right;white-space:nowrap}
+.seen{display:inline-flex;align-items:center;gap:.35rem;margin-top:.35rem;font-size:var(--fs-6);color:var(--muted)}
+.seen svg{width:16px;height:16px}
+.seen.is-seen{color:var(--ok)}
+.sync-meta{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;padding:1rem 1.35rem 0}
+.sync-meta div{background:var(--paper);border-radius:var(--radius);padding:.7rem .9rem;display:grid}
+.sync-meta span{font-size:var(--fs-6);color:var(--muted)}
+.sync-meta b{font-weight:500;color:var(--ink)}
+.list--compact li{padding-block:.7rem}
+.list li > div:first-child{min-width:0}

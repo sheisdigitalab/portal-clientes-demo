@@ -338,18 +338,138 @@
     $('#invite-all').onclick = () => toast(`Invitación enviada a ${cs.filter(c => c.email && !c.ultimo_acceso).length} clientes`);
   }
 
+  /* Actividad: eventos de demo generados de forma estable a partir de los datos */
+  function buildActivity() {
+    const t = T(); if (t._act) return t._act;
+    let seed = [...tenantKey].reduce((a, c) => a + c.charCodeAt(0), 0);
+    const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+    const pick = a => a[Math.floor(rnd() * a.length)];
+    const hoy = new Date(D.hoy + 'T12:00');
+    const iso = d => d.toISOString().slice(0, 10);
+    const hora = (h0, h1) => { const m = Math.floor((h0 + rnd() * (h1 - h0)) * 60); return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); };
+    const ev = [];
+    t.clientes.forEach((c, ci) => {
+      if (!c.ultimo_acceso) {
+        if (c.email) ev.push({ d: iso(new Date(hoy - 12 * 864e5)), h: '10:15', tipo: 'invitacion', c, txt: 'Invitación enviada', doc: null });
+        return;
+      }
+      const ultimo = new Date(c.ultimo_acceso + 'T12:00');
+      const sesiones = 2 + Math.floor(rnd() * 5);
+      for (let s = 0; s < sesiones; s++) {
+        const dia = s === 0 ? ultimo : new Date(ultimo - Math.floor(rnd() * 28) * 864e5);
+        const h = hora(6, 10.5);
+        ev.push({ d: iso(dia), h, tipo: 'acceso', c, txt: 'Ha entrado en el área de clientes', doc: null });
+        const docs = [...c.facturas.filter(f => f.fecha <= iso(dia)).slice(0, 2).map(f => ['factura', f]), ...c.albaranes.filter(a => a.fecha <= iso(dia)).slice(0, 3).map(a => ['albaran', a])];
+        const n = 1 + Math.floor(rnd() * 2);
+        for (let k = 0; k < n && docs.length; k++) {
+          const [kind, doc] = docs.splice(Math.floor(rnd() * docs.length), 1)[0];
+          ev.push({ d: iso(dia), h: h.replace(/\d\d$/, m => String(Math.min(59, +m + 1 + k)).padStart(2, '0')), tipo: kind, c, txt: kind === 'factura' ? 'Ha descargado la factura' : 'Ha descargado el albarán', doc: doc.numero, estado: doc.estado });
+        }
+      }
+    });
+    const sync = [];
+    t.clientes.forEach(c => {
+      c.pedidos.filter(p => (hoy - new Date(p.fecha + 'T12:00')) / 864e5 < 3).forEach(p => sync.push({ d: p.fecha, h: hora(4, 6), tipo: 'pedido', c, doc: p.numero, txt: 'Pedido recibido' }));
+      c.albaranes.filter(a => (hoy - new Date(a.fecha + 'T12:00')) / 864e5 < 3).forEach(a => sync.push({ d: a.fecha, h: hora(5, 7.5), tipo: 'albaran', c, doc: a.numero, txt: 'Albarán emitido' }));
+      c.facturas.filter(f => (hoy - new Date(f.fecha + 'T12:00')) / 864e5 < 20).forEach(f => sync.push({ d: f.fecha, h: hora(13, 15), tipo: 'factura', c, doc: f.numero, txt: 'Factura emitida' }));
+    });
+    const byDate = (a, b) => (b.d + b.h).localeCompare(a.d + a.h);
+    ev.sort(byDate); sync.sort(byDate);
+    // Un mismo documento descargado dos veces el mismo día cuenta una vez
+    const seen = new Set();
+    for (let i = ev.length - 1; i >= 0; i--) { const k = ev[i].c.id + ev[i].d + ev[i].tipo + (ev[i].doc || ''); if (seen.has(k)) ev.splice(i, 1); else seen.add(k); }
+    // Facturas vencidas o pendientes que el cliente ya ha descargado: prueba de recepción para reclamar el cobro
+    const vistas = new Set(ev.filter(e => e.tipo === 'factura').map(e => e.doc));
+    return (t._act = { ev, sync, vistas });
+  }
+
   function panelActividad() {
-    const cs = T().clientes;
-    const ev = cs.flatMap(c => c.ultimo_acceso ? [
-      { f: c.ultimo_acceso, t: `${c.nombre} ha descargado ${c.facturas[0]?.numero || 'un albarán'}`, i: I.down },
-      { f: c.ultimo_acceso, t: `${c.nombre} ha entrado en el área de clientes`, i: I.user }] : []).sort((a, b) => b.f.localeCompare(a.f)).slice(0, 12);
-    const sync = cs[0].albaranes.slice(0, 4).map(a => ({ f: a.fecha, t: `Mercagestion ha enviado el albarán ${a.numero}`, i: I.bolt }));
+    const t = T(), cs = t.clientes, A = buildActivity();
+    const hoyISO = D.hoy;
+    const dayDiff = d => Math.round((new Date(hoyISO + 'T12:00') - new Date(d + 'T12:00')) / 864e5);
+    const last30 = A.ev.filter(e => dayDiff(e.d) < 30);
+    const activos = new Set(last30.filter(e => e.tipo === 'acceso').map(e => e.c.id));
+    const descargas = last30.filter(e => e.tipo === 'factura' || e.tipo === 'albaran').length;
+    const recibidosHoy = A.sync.filter(e => e.d === hoyISO);
+    const cobro = cs.flatMap(c => c.facturas.filter(f => f.estado !== 'Pagada').map(f => ({ c, f, vista: A.vistas.has(f.numero) })))
+      .sort((a, b) => (a.f.estado === 'Vencida' ? 0 : 1) - (b.f.estado === 'Vencida' ? 0 : 1) || a.f.vencimiento.localeCompare(b.f.vencimiento));
+    const sinEntrar = cs.filter(c => !c.ultimo_acceso || dayDiff(c.ultimo_acceso) > 14);
+    // Actividad de los últimos 14 días para el gráfico
+    const dias = Array.from({ length: 14 }, (_, i) => { const d = new Date(new Date(hoyISO + 'T12:00') - (13 - i) * 864e5).toISOString().slice(0, 10); return { d, n: A.ev.filter(e => e.d === d).length }; });
+    const max = Math.max(...dias.map(x => x.n), 1);
+    const dLabel = d => { const n = dayDiff(d); return n === 0 ? 'Hoy' : n === 1 ? 'Ayer' : (x => x[0].toUpperCase() + x.slice(1))(new Date(d + 'T12:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })); };
+    const icon = { acceso: I.user, factura: I.doc, albaran: I.truck, invitacion: I.send, pedido: I.box };
+
     shell('panel/actividad', `
-      <div class="head"><div><h1>Actividad</h1><p>Qué hacen tus clientes y qué llega desde Mercagestion.</p></div></div>
-      <div class="grid2">
-        <section class="card"><div class="card__head"><h3>Clientes</h3></div><ul class="list">${ev.map(e => `<li><div style="display:flex;gap:.75rem;align-items:center"><span class="icon-btn" aria-hidden="true" style="pointer-events:none">${e.i}</span><span>${esc(e.t)}</span></div><span class="sub">${fecha(e.f)}</span></li>`).join('')}</ul></section>
-        <section class="card"><div class="card__head"><h3>Sincronización con Mercagestion</h3>${badge('Conectado')}</div><ul class="list">${sync.map(e => `<li><div style="display:flex;gap:.75rem;align-items:center"><span class="icon-btn" aria-hidden="true" style="pointer-events:none">${e.i}</span><span>${esc(e.t)}</span></div><span class="sub">${fecha(e.f)}</span></li>`).join('')}</ul></section>
-      </div>`, panelTabs, 'Equipo de ' + T().nombre, 'Administración');
+      <div class="head"><div><h1>Actividad</h1><p>Lo que hacen tus clientes en el área de clientes y lo que llega desde Mercagestion.</p></div>
+        <span class="range">Últimos 30 días</span></div>
+
+      <div class="stats">
+        <div class="stat stat--brand"><span>Clientes activos</span><strong>${activos.size} <small class="of">de ${cs.length}</small></strong><small>han entrado en los últimos 30 días</small></div>
+        <div class="stat"><span>Documentos descargados</span><strong>${descargas}</strong><small>facturas y albaranes</small></div>
+        <div class="stat"><span>Consultas que te has ahorrado</span><strong>≈ ${Math.round(descargas * .6)}</strong><small>llamadas y emails pidiendo copias</small></div>
+        <div class="stat"><span>Recibido hoy de Mercagestion</span><strong>${recibidosHoy.length}</strong><small>pedidos, albaranes y facturas</small></div>
+      </div>
+
+      <div class="act-grid">
+        <div class="act-main">
+          <section class="card" aria-labelledby="h-chart">
+            <div class="card__head"><h3 id="h-chart">Uso del área de clientes</h3><span class="sub">Movimientos por día · últimas 2 semanas</span></div>
+            <div class="chart" role="img" aria-label="Movimientos por día en las últimas dos semanas: ${dias.map(x => x.n).join(', ')}">
+              ${dias.map(x => `<div class="chart__col${x.d === hoyISO ? ' is-today' : ''}"><span class="chart__v">${x.n || ''}</span><span class="chart__bar" style="height:${Math.max(4, x.n / max * 100)}%"></span><span class="chart__d">${new Date(x.d + 'T12:00').toLocaleDateString('es-ES', { weekday: 'narrow' }).toUpperCase()}</span></div>`).join('')}
+            </div>
+          </section>
+
+          <section class="card" aria-labelledby="h-feed">
+            <div class="card__head"><h3 id="h-feed">Movimientos</h3></div>
+            <div class="toolbar">
+              <div class="chips" role="group" aria-label="Tipo de movimiento">
+                ${[['todo', 'Todo'], ['acceso', 'Accesos'], ['descarga', 'Descargas'], ['invitacion', 'Invitaciones']].map(([k, l], i) => `<button type="button" class="chip" data-f="${k}" aria-pressed="${i === 0}">${l}</button>`).join('')}
+              </div>
+              <select id="f-cli" aria-label="Filtrar por cliente"><option value="">Todos los clientes</option>${cs.map(c => `<option value="${c.id}">${esc(c.nombre)}</option>`).join('')}</select>
+            </div>
+            <div id="feed"></div>
+          </section>
+        </div>
+
+        <aside class="act-side">
+          <section class="card" aria-labelledby="h-cobro">
+            <div class="card__head"><h3 id="h-cobro">Para reclamar el cobro</h3></div>
+            <p class="card__intro">Facturas sin pagar. Si el cliente ya la ha descargado, tienes constancia de que la ha recibido.</p>
+            <ul class="list">${cobro.slice(0, 5).map(x => `<li><div><b>${esc(x.c.nombre)}</b><span class="sub">${x.f.numero} · vence ${fecha(x.f.vencimiento)}</span>
+              <span class="seen ${x.vista ? 'is-seen' : ''}">${x.vista ? I.check + 'Descargada por el cliente' : I.eye + 'Aún no la ha abierto'}</span></div>
+              <div class="side-r">${badge(x.f.estado)}<b>${eur(x.f.total)}</b></div></li>`).join('')}</ul>
+            ${(() => { const v = new Set(cobro.filter(x => x.f.estado === 'Vencida').map(x => x.c.id)).size; const n = v || new Set(cobro.map(x => x.c.id)).size; return `<div class="card__foot"><button class="btn btn--ghost btn--sm" data-toast="Recordatorio de pago enviado a ${n} cliente${n === 1 ? '' : 's'}">${I.mail}${v ? 'Recordar el pago a los vencidos' : 'Recordar los pagos pendientes'}</button></div>`; })()}
+          </section>
+
+          <section class="card" aria-labelledby="h-inact">
+            <div class="card__head"><h3 id="h-inact">Clientes sin entrar</h3><span class="sub">más de 14 días</span></div>
+            <ul class="list">${sinEntrar.length ? sinEntrar.map(c => `<li><div><b>${esc(c.nombre)}</b><span class="sub">${c.ultimo_acceso ? 'Último acceso: ' + fecha(c.ultimo_acceso) : c.email ? 'Nunca ha entrado' : 'Sin email en Mercagestion'}</span></div>
+              ${c.email ? `<button class="btn btn--ghost btn--sm" data-toast="Invitación enviada a ${esc(c.nombre)}">${I.send}Invitar</button>` : `<span class="sub" style="text-align:right">Añade su email<br>en Mercagestion</span>`}</li>`).join('') : '<li><span class="sub">Todos tus clientes han entrado recientemente.</span></li>'}</ul>
+          </section>
+
+          <section class="card" aria-labelledby="h-sync">
+            <div class="card__head"><h3 id="h-sync">Mercagestion</h3>${badge('Conectado')}</div>
+            <div class="sync-meta"><div><span>Última recepción</span><b>Hoy, ${A.sync.find(s => s.d === hoyISO)?.h || '—'}</b></div><div><span>Errores</span><b>0</b></div></div>
+            <ul class="list list--compact">${A.sync.slice(0, 6).map(s => `<li><div class="ev-l"><span class="ev-ico">${icon[s.tipo]}</span><div><b>${s.txt} ${s.doc}</b><span class="sub">${esc(s.c.nombre)}</span></div></div><span class="sub">${s.d === hoyISO ? '' : fecha(s.d) + ' · '}${s.h}</span></li>`).join('')}</ul>
+          </section>
+        </aside>
+      </div>`, panelTabs, 'Equipo de ' + t.nombre, 'Administración');
+
+    const st = { f: 'todo', c: '' };
+    const draw = () => {
+      const rows = A.ev.filter(e => dayDiff(e.d) < 30 && (st.f === 'todo' || (st.f === 'descarga' ? (e.tipo === 'factura' || e.tipo === 'albaran') : e.tipo === st.f)) && (!st.c || e.c.id === st.c));
+      if (!rows.length) { $('#feed').innerHTML = '<p class="empty">No hay movimientos con estos filtros.</p>'; return; }
+      const groups = {}; rows.forEach(e => (groups[e.d] = groups[e.d] || []).push(e));
+      $('#feed').innerHTML = Object.entries(groups).slice(0, 10).map(([d, es]) => `
+        <div class="feed-day"><h4>${dLabel(d)}</h4><ul class="list">${es.map(e => `<li>
+          <div class="ev-l"><span class="ev-ico ev-${e.tipo}">${icon[e.tipo]}</span><div><b>${esc(e.c.nombre)}</b><span class="sub">${e.txt}${e.doc ? ` <span class="doc">${e.doc}</span>` : ''}${e.estado && e.estado !== 'Pagada' && e.tipo === 'factura' ? ' · ' + badge(e.estado) : ''}</span></div></div>
+          <span class="sub ev-t">${e.h}</span></li>`).join('')}</ul></div>`).join('');
+    };
+    $$('.chip[data-f]').forEach(ch => ch.onclick = () => { $$('.chip[data-f]').forEach(x => x.setAttribute('aria-pressed', x === ch)); st.f = ch.dataset.f; draw(); });
+    $('#f-cli').onchange = e => { st.c = e.target.value; draw(); };
+    if (!app._toastBound) { app._toastBound = true; app.addEventListener('click', e => { const b = e.target.closest('[data-toast]'); if (b) toast(b.dataset.toast); }); }
+    draw();
   }
 
   /* ---------- Rutas ---------- */
