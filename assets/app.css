@@ -527,3 +527,4 @@ textarea:focus-visible,.qty input:focus-visible,.np-add select:focus-visible{out
   table.resp tr.grp th{border-top:0}
   .s-shell .toolbar{display:grid;grid-template-columns:minmax(0,1fr) auto}
 }
+.demo-bar__seg--ver{margin-left:0}
