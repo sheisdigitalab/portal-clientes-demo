@@ -28,7 +28,6 @@
     check: svg('<path d="m5 12 5 5 9-10"/>'),
     mail: svg('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 6.5 8.5 6.5 8.5-6.5"/>'),
     bolt: svg('<path d="M13 3 5 14h6l-1 7 8-11h-6z"/>'),
-    palette: svg('<circle cx="12" cy="12" r="9"/><circle cx="8" cy="10" r="1.2"/><circle cx="12" cy="7.5" r="1.2"/><circle cx="16" cy="10" r="1.2"/><path d="M12 21a2.5 2.5 0 0 1 0-5h1.5a3 3 0 0 0 3-3"/>'),
     chart: svg('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),
     send: svg('<path d="M21 3 10 14M21 3l-7 18-4-7-7-4z"/>')
   };
@@ -49,7 +48,7 @@
   const logged = () => store.get('logged-' + tenantKey, false);
 
   function applyBrand() {
-    document.documentElement.style.setProperty('--brand', store.get('color-' + tenantKey, T().color));
+    document.documentElement.style.setProperty('--brand', T().color);
     document.title = (view === 'panel' ? 'Panel · ' : 'Área de clientes · ') + T().nombre;
   }
   const say = t => { $('#live').textContent = t; };
@@ -303,7 +302,7 @@
   }
 
   /* ---------- Panel del mayorista ---------- */
-  const panelTabs = [['panel/clientes', 'Clientes', I.users], ['panel/actividad', 'Actividad', I.chart], ['panel/aspecto', 'Aspecto y web', I.palette]];
+  const panelTabs = [['panel/clientes', 'Clientes', I.users], ['panel/actividad', 'Actividad', I.chart]];
 
   function panelClientes() {
     const cs = T().clientes;
@@ -353,40 +352,13 @@
       </div>`, panelTabs, 'Equipo de ' + T().nombre, 'Administración');
   }
 
-  function panelAspecto() {
-    const colors = ['#0e6e8c', '#b4442e', '#1f5f8b', '#2f6b3a', '#6b3fa0', '#141c28'];
-    const cur = store.get('color-' + tenantKey, T().color);
-    shell('panel/aspecto', `
-      <div class="head"><div><h1>Aspecto y web</h1><p>Tu área de clientes con tu marca, dentro de tu web.</p></div></div>
-      <section class="card"><div class="card__head"><h3>Marca</h3></div>
-        <div class="brandbox">
-          <div style="display:grid;gap:1.25rem;align-content:start">
-            <div class="field"><label>Logo</label><div style="display:flex;gap:1rem;align-items:center">${logo()}<button class="btn btn--ghost btn--sm" type="button" id="up">Cambiar logo</button></div></div>
-            <div class="field"><span style="font-size:var(--fs-6);font-weight:500;color:var(--ink)">Color principal</span><div class="swatches" role="group" aria-label="Color principal">${colors.map(c => `<button type="button" style="background:${c}" data-c="${c}" aria-label="Color ${c}" aria-pressed="${c === cur}"></button>`).join('')}</div></div>
-            <div class="field"><label for="dom">Dirección del área de clientes</label><input id="dom" value="${esc(T().dominio)}" readonly></div>
-          </div>
-          <div><p style="font-size:var(--fs-6);color:var(--muted);margin-bottom:.5rem">Vista previa</p><div class="preview"><div class="preview__top">${logo()}</div><div class="preview__body"><div class="preview__line" style="width:60%"></div><div class="preview__line"></div><div class="preview__line" style="width:80%"></div><span class="btn btn--brand btn--sm" style="justify-self:start">Descargar PDF</span></div></div></div>
-        </div>
-      </section>
-      <section class="card"><div class="card__head"><h3>Añadirlo a tu web</h3></div>
-        <div style="padding:1.35rem;display:grid;gap:1rem">
-          <p style="color:var(--muted)">Pon este botón en el menú de tu web. Funciona en WordPress, Wix o cualquier otra.</p>
-          <div class="embed">&lt;a href="https://${esc(T().dominio)}"&gt;Área de clientes&lt;/a&gt;</div>
-          <button class="btn btn--ghost btn--sm" id="copy" style="justify-self:start">Copiar código</button>
-        </div>
-      </section>`, panelTabs, 'Equipo de ' + T().nombre, 'Administración');
-    $$('.swatches button').forEach(b => b.onclick = () => { store.set('color-' + tenantKey, b.dataset.c); applyBrand(); $$('.swatches button').forEach(x => x.setAttribute('aria-pressed', x === b)); say('Color actualizado'); });
-    $('#up').onclick = () => toast('En la versión final podrás subir tu logo.');
-    $('#copy').onclick = async () => { try { await navigator.clipboard.writeText(`<a href="https://${T().dominio}">Área de clientes</a>`); toast('Código copiado'); } catch { toast('Selecciona el código y cópialo'); } };
-  }
-
   /* ---------- Rutas ---------- */
   function route() {
     applyBrand();
     const h = location.hash.replace(/^#\//, '') || '';
     if (view === 'panel') {
       if (!h.startsWith('panel/')) { location.replace('#/panel/clientes'); return; }
-      ({ 'panel/clientes': panelClientes, 'panel/actividad': panelActividad, 'panel/aspecto': panelAspecto }[h] || panelClientes)();
+      ({ 'panel/clientes': panelClientes, 'panel/actividad': panelActividad }[h] || panelClientes)();
     } else if (!logged()) {
       if (h === 'codigo') loginCode(); else { if (h !== 'acceso') history.replaceState(null, '', '#/acceso'); loginEmail(); }
     } else {

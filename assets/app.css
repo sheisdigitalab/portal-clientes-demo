@@ -203,18 +203,6 @@ td .sub{display:block;font-size:var(--fs-6);color:var(--muted)}
 .timeline li.done{color:var(--ink)}
 .timeline li.done::before{background:var(--brand);border-color:var(--brand)}
 
-/* Panel del mayorista */
-.brandbox{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;padding:1.35rem}
-.swatches{display:flex;gap:.5rem;flex-wrap:wrap}
-.swatches button{width:40px;height:40px;border-radius:10px;border:2px solid transparent;cursor:pointer}
-.swatches button[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 3px var(--white)}
-.preview{border:1px solid var(--line);border-radius:var(--r-card);overflow:hidden}
-.preview__top{background:var(--brand);color:var(--white);padding:1rem;display:flex;gap:.6rem;align-items:center}
-.preview__top .logo__mark{background:var(--white);color:var(--brand)}
-.preview__body{padding:1rem;display:grid;gap:.6rem}
-.preview__line{height:10px;border-radius:6px;background:var(--paper)}
-@media (max-width:860px){.brandbox{grid-template-columns:1fr}}
-.embed{font-family:ui-monospace,Consolas,monospace;font-size:var(--fs-6);background:var(--ink);color:#e3e7ee;border-radius:var(--radius);padding:1rem;overflow-x:auto;white-space:pre}
 .toast{position:fixed;left:50%;bottom:1.5rem;translate:-50% 0;z-index:90;background:var(--ink);color:var(--white);padding:.8rem 1.1rem;border-radius:var(--radius);font-size:var(--fs-6);box-shadow:var(--shadow);opacity:0;transition:opacity .25s,transform .25s;transform:translateY(8px)}
 .toast.show{opacity:1;transform:none}
 footer.pf{max-width:1280px;margin-inline:auto;padding:0 clamp(1rem, 3vw, 2rem) 2rem;font-size:var(--fs-6);color:var(--muted);display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap}
@@ -223,7 +211,6 @@ footer.pf{max-width:1280px;margin-inline:auto;padding:0 clamp(1rem, 3vw, 2rem) 2
 /* Ajustes */
 .shell{grid-template-columns:minmax(0,1fr)}
 .tabs,.main > *{min-width:0}
-.preview__top .logo,.preview__top .logo__name{color:var(--white)}
 @media (max-width:760px){.tabs{padding-bottom:2px}.head .btn{width:100%}}
 
 @media (max-width:1080px){
