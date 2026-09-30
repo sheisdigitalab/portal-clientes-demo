@@ -431,14 +431,17 @@
     const pend = cs.reduce((s, c) => s + pendOf(c).reduce((a, f) => a + f.total, 0), 0);
     const venc = cs.reduce((s, c) => s + vencOf(c).reduce((a, f) => a + f.total, 0), 0);
     const sinInv = cs.filter(c => c.email && !c.ultimo_acceso).length;
+    const A = buildActivity();
+    const hace = d => Math.round((new Date(D.hoy + 'T12:00') - new Date(d + 'T12:00')) / 864e5);
+    const desc = c => A.ev.filter(e => (!c || e.c.id === c.id) && (e.tipo === 'factura' || e.tipo === 'albaran') && hace(e.d) < 30).length;
     shell('panel/clientes', `
-      <div class="head"><div><h1>Clientes</h1><p>Se crean solos desde Mercagestion. Aquí ves quién usa el área de clientes y lo que tiene pendiente.</p></div>
-        ${sinInv ? `<button class="btn btn--brand" data-toast="Invitación enviada a ${plural(sinInv, 'cliente')}">${I.send}Invitar a los que no han entrado (${sinInv})</button>` : ''}</div>
+      <div class="head"><div><h1>Clientes</h1><p>Se sincronizan solos con Mercagestion. Aquí ves quién usa el área de clientes y cuánto tiene pendiente cada uno.</p></div>
+        ${sinInv ? `<button class="btn btn--brand" data-toast="Invitación enviada a ${plural(sinInv, 'cliente')}">${I.send}Enviar invitaciones (${sinInv})</button>` : ''}</div>
       <div class="stats">
         <div class="stat stat--brand"><span>Usan el área de clientes</span><strong>${withAccess.length} <small class="of">de ${cs.length}</small></strong><small>${Math.round(withAccess.length / cs.length * 100)} % de tus clientes</small></div>
-        <div class="stat"><span>Descargas este mes</span><strong>${cs.reduce((s, c) => s + c.descargas, 0)}</strong><small>facturas y albaranes</small></div>
+        <div class="stat"><span>Documentos descargados</span><strong>${desc()}</strong><small>en los últimos 30 días</small></div>
         <div class="stat"><span>Pendiente de cobro</span><strong>${eur(pend)}</strong><small>entre todos los clientes</small></div>
-        <div class="stat"><span>Vencido</span><strong class="${venc ? 'is-bad' : ''}">${eur(venc)}</strong><small>${plural(cs.filter(c => vencOf(c).length).length, 'cliente')}</small></div>
+        <div class="stat"><span>Vencido</span><strong class="${venc ? 'is-bad' : ''}">${eur(venc)}</strong><small>de ${plural(cs.filter(c => vencOf(c).length).length, 'cliente')}</small></div>
       </div>
       <section class="card" aria-label="Listado de clientes">
         <div class="toolbar">
@@ -455,7 +458,7 @@
       $('#tbl').innerHTML = `<table class="resp resp--cli"><thead><tr><th scope="col">Cliente</th><th scope="col">Último acceso</th><th scope="col" class="num">Pendiente</th><th scope="col" class="num">Vencido</th><th><span class="sr-only">Acciones</span></th></tr></thead><tbody>
         ${rows.map(c => { const p = pendOf(c), v = vencOf(c); return `<tr data-cli="${c.id}">
           <td class="first"><b>${esc(c.nombre)}</b><span class="sub">${c.email ? esc(c.email) : '<span class="is-warn">Sin email en Mercagestion</span>'}</span></td>
-          <td class="c-acc">${c.ultimo_acceso ? `${fecha(c.ultimo_acceso)}<span class="sub">${plural(c.descargas, 'descarga')} este mes</span>` : badge('Nunca')}</td>
+          <td class="c-acc">${c.ultimo_acceso ? `${fecha(c.ultimo_acceso)}<span class="sub">${plural(desc(c), 'descarga')} en 30 días</span>` : badge('Nunca')}</td>
           <td class="num c-pen">${p.length ? `${eur(p.reduce((s, f) => s + f.total, 0))}<span class="sub">${plural(p.length, 'factura')}</span>` : '<span class="muted">—</span>'}</td>
           <td class="num c-ven">${v.length ? `<b class="is-bad">${eur(v.reduce((s, f) => s + f.total, 0))}</b>` : '<span class="muted">—</span>'}</td>
           <td class="act">${c.email ? `<button class="btn btn--ghost btn--sm" data-toast="${c.ultimo_acceso ? 'Acceso reenviado a' : 'Invitación enviada a'} ${esc(c.nombre)}">${I.send}${c.ultimo_acceso ? 'Reenviar acceso' : 'Invitar'}</button>` : ''}<span class="chev" aria-hidden="true">${I.chev}</span></td></tr>`; }).join('')}
@@ -480,12 +483,12 @@
         <div><dt>Último acceso</dt><dd>${c.ultimo_acceso ? fecha(c.ultimo_acceso) : 'Nunca'}</dd></div>
       </dl>
       <section><h3 class="dr-h">Facturas sin pagar</h3>
-        ${pend.length ? `<ul class="list list--flat">${pend.map(f => `<li><div><b>${f.numero}</b><span class="sub">${vencTxt(f)}${A.vistas.has(f.numero) ? ' · descargada por el cliente' : ''}</span></div><div class="row-r">${badge(f.estado)}<b class="amt">${eur(f.total)}</b></div></li>`).join('')}</ul>` : '<p class="muted">Está al día.</p>'}
+        ${pend.length ? `<ul class="list list--flat">${pend.map(f => `<li><div><b>${f.numero}</b><span class="sub">${vencTxt(f)}${A.vistas.has(f.numero) ? ' · descargada por el cliente' : ''}</span></div><div class="row-r">${badge(f.estado)}<b class="amt">${eur(f.total)}</b></div></li>`).join('')}</ul>` : '<p class="muted">No tiene facturas pendientes.</p>'}
       </section>
       <section><h3 class="dr-h">Última actividad</h3>
         ${ev.length ? `<ul class="list list--flat">${ev.map(e => `<li><div class="ev-l"><span class="ev-ico ev-${e.tipo}">${icon[e.tipo]}</span><div><b>${e.txt}</b><span class="sub">${e.doc ? e.doc + ' · ' : ''}${fecha(e.d)}, ${e.h}</span></div></div></li>`).join('')}</ul>` : '<p class="muted">Todavía no ha entrado en el área de clientes.</p>'}
       </section>`;
-    const foot = `${c.email ? `<button class="btn btn--brand" data-toast="${c.ultimo_acceso ? 'Acceso reenviado a' : 'Invitación enviada a'} ${esc(c.nombre)}">${I.send}${c.ultimo_acceso ? 'Reenviar acceso' : 'Enviar invitación'}</button>` : ''}${pend.length ? `<button class="btn btn--ghost" data-toast="Recordatorio de pago enviado a ${esc(c.nombre)}">${I.mail}Recordar pago</button>` : ''}`;
+    const foot = `${c.email ? `<button class="btn btn--brand" data-toast="${c.ultimo_acceso ? 'Acceso reenviado a' : 'Invitación enviada a'} ${esc(c.nombre)}">${I.send}${c.ultimo_acceso ? 'Reenviar acceso' : 'Enviar invitación'}</button>` : ''}${pend.length ? `<button class="btn btn--ghost" data-toast="Recordatorio de pago enviado a ${esc(c.nombre)}">${I.mail}Enviar recordatorio de pago</button>` : ''}`;
     const { wrap } = drawer(esc(c.nombre), `Cliente de ${esc(T().nombre)}`, body, foot);
     wrap.addEventListener('click', e => { const b = e.target.closest('[data-toast]'); if (b) toast(b.dataset.toast); });
   }
@@ -553,21 +556,21 @@
     const icon = { acceso: I.user, factura: I.doc, albaran: I.truck, invitacion: I.send, pedido: I.box };
 
     shell('panel/actividad', `
-      <div class="head"><div><h1>Actividad</h1><p>Lo que hacen tus clientes en el área de clientes y lo que llega desde Mercagestion.</p></div>
+      <div class="head"><div><h1>Actividad</h1><p>Qué hacen tus clientes cuando entran y qué documentos llegan desde Mercagestion.</p></div>
         <span class="range">Últimos 30 días</span></div>
 
       <div class="stats">
         <div class="stat stat--brand"><span>Clientes activos</span><strong>${activos.size} <small class="of">de ${cs.length}</small></strong><small>han entrado en los últimos 30 días</small></div>
         <div class="stat"><span>Documentos descargados</span><strong>${descargas}</strong><small>facturas y albaranes</small></div>
-        <div class="stat"><span>Consultas que te has ahorrado</span><strong>≈ ${Math.round(descargas * .6)}</strong><small>llamadas y emails pidiendo copias</small></div>
-        <div class="stat"><span>Recibido hoy de Mercagestion</span><strong>${recibidosHoy.length}</strong><small>pedidos, albaranes y facturas</small></div>
+        <div class="stat"><span>Llamadas y emails ahorrados</span><strong>≈ ${Math.round(descargas * .6)}</strong><small>copias que ya no te piden (estimación)</small></div>
+        <div class="stat"><span>Documentos recibidos hoy</span><strong>${recibidosHoy.length}</strong><small>desde Mercagestion</small></div>
       </div>
 
       <div class="act-grid">
         <div class="act-main">
           <section class="card" aria-labelledby="h-chart">
-            <div class="card__head"><h3 id="h-chart">Uso del área de clientes</h3><span class="sub">Movimientos por día · últimas 2 semanas</span></div>
-            <div class="chart" role="img" aria-label="Movimientos por día en las últimas dos semanas: ${dias.map(x => x.n).join(', ')}">
+            <div class="card__head"><h3 id="h-chart">Uso del área de clientes</h3><span class="sub">Entradas y descargas por día · últimas 2 semanas</span></div>
+            <div class="chart" role="img" aria-label="Entradas y descargas por día en las últimas dos semanas: ${dias.map(x => x.n).join(', ')}">
               ${dias.map(x => `<div class="chart__col${x.d === hoyISO ? ' is-today' : ''}"><span class="chart__v">${x.n || ''}</span><span class="chart__bar" style="height:${Math.max(4, x.n / max * 100)}%"></span><span class="chart__d">${new Date(x.d + 'T12:00').toLocaleDateString('es-ES', { weekday: 'narrow' }).toUpperCase()}</span></div>`).join('')}
             </div>
           </section>
@@ -586,16 +589,16 @@
 
         <aside class="act-side">
           <section class="card" aria-labelledby="h-cobro">
-            <div class="card__head"><h3 id="h-cobro">Para reclamar el cobro</h3></div>
-            <p class="card__intro">Facturas sin pagar. Si el cliente ya la ha descargado, tienes constancia de que la ha recibido.</p>
+            <div class="card__head"><h3 id="h-cobro">Cobros pendientes</h3></div>
+            <p class="card__intro">Facturas sin cobrar. Si el cliente la ha descargado, tienes constancia de que la ha recibido.</p>
             <ul class="list">${cobro.slice(0, 5).map(x => `<li><div><b>${esc(x.c.nombre)}</b><span class="sub">${x.f.numero} · vence ${fecha(x.f.vencimiento)}</span>
-              <span class="seen ${x.vista ? 'is-seen' : ''}">${x.vista ? I.check + 'Descargada por el cliente' : I.eye + 'Aún no la ha abierto'}</span></div>
+              <span class="seen ${x.vista ? 'is-seen' : ''}">${x.vista ? I.check + 'Descargada por el cliente' : I.eye + 'Aún no la ha descargado'}</span></div>
               <div class="side-r">${badge(x.f.estado)}<b>${eur(x.f.total)}</b></div></li>`).join('')}</ul>
-            ${(() => { const v = new Set(cobro.filter(x => x.f.estado === 'Vencida').map(x => x.c.id)).size; const n = v || new Set(cobro.map(x => x.c.id)).size; return `<div class="card__foot"><button class="btn btn--ghost btn--sm" data-toast="Recordatorio de pago enviado a ${n} cliente${n === 1 ? '' : 's'}">${I.mail}${v ? 'Recordar el pago a los vencidos' : 'Recordar los pagos pendientes'}</button></div>`; })()}
+            ${(() => { const v = new Set(cobro.filter(x => x.f.estado === 'Vencida').map(x => x.c.id)).size; const n = v || new Set(cobro.map(x => x.c.id)).size; return `<div class="card__foot"><button class="btn btn--ghost btn--sm" data-toast="Recordatorio de pago enviado a ${n} cliente${n === 1 ? '' : 's'}">${I.mail}${v ? 'Enviar recordatorio a los vencidos' : 'Enviar recordatorio de pago'}</button></div>`; })()}
           </section>
 
           <section class="card" aria-labelledby="h-inact">
-            <div class="card__head"><h3 id="h-inact">Clientes sin entrar</h3><span class="sub">más de 14 días</span></div>
+            <div class="card__head"><h3 id="h-inact">Clientes que no entran</h3><span class="sub">hace más de 14 días</span></div>
             <ul class="list">${sinEntrar.length ? sinEntrar.map(c => `<li><div><b>${esc(c.nombre)}</b><span class="sub">${c.ultimo_acceso ? 'Último acceso: ' + fecha(c.ultimo_acceso) : c.email ? 'Nunca ha entrado' : 'Sin email en Mercagestion'}</span></div>
               ${c.email ? `<button class="btn btn--ghost btn--sm" data-toast="Invitación enviada a ${esc(c.nombre)}">${I.send}Invitar</button>` : `<span class="sub" style="text-align:right">Añade su email<br>en Mercagestion</span>`}</li>`).join('') : '<li><span class="sub">Todos tus clientes han entrado recientemente.</span></li>'}</ul>
           </section>
@@ -603,7 +606,7 @@
           ${autoAvisos()}
           <section class="card" aria-labelledby="h-sync">
             <div class="card__head"><h3 id="h-sync">Mercagestion</h3>${badge('Conectado')}</div>
-            <div class="sync-meta"><div><span>Última recepción</span><b>Hoy, ${A.sync.find(s => s.d === hoyISO)?.h || '—'}</b></div><div><span>Errores</span><b>0</b></div></div>
+            <div class="sync-meta"><div><span>Última recepción</span><b>Hoy, ${A.sync.find(s => s.d === hoyISO)?.h || '—'}</b></div><div><span>Incidencias</span><b>0</b></div></div>
             <ul class="list list--compact">${A.sync.slice(0, 6).map(s => `<li><div class="ev-l"><span class="ev-ico">${icon[s.tipo]}</span><div><b>${s.txt} ${s.doc}</b><span class="sub">${esc(s.c.nombre)}</span></div></div><span class="sub">${s.d === hoyISO ? '' : fecha(s.d) + ' · '}${s.h}</span></li>`).join('')}</ul>
           </section>
         </aside>
