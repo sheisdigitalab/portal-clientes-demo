@@ -267,7 +267,7 @@
     const c = C();
     const cfg = {
       pedidos: { title: 'Pedidos', desc: 'Un pedido pasa a «Servido» cuando sale su albarán y a «Facturado» cuando entra en una factura.', rows: c.pedidos, states: ['Todos', 'Pendiente de servir', 'Servido', 'Facturado'], ph: 'Buscar por número o producto' },
-      albaranes: { title: 'Albaranes', desc: 'Un albarán por cada entrega, con el peso y los productos servidos.', rows: c.albaranes, states: ['Todos', 'Sin facturar', 'Facturado'], ph: 'Buscar por número o producto' },
+      albaranes: { title: 'Albaranes', desc: 'Un albarán por cada pedido que recoges, con el peso y los productos.', rows: c.albaranes, states: ['Todos', 'Sin facturar', 'Facturado'], ph: 'Buscar por número o producto' },
       facturas: { title: 'Facturas', desc: 'Cada factura agrupa los albaranes de una quincena.', rows: c.facturas, states: ['Todas', 'Pendiente', 'Vencida', 'Pagada'], ph: 'Buscar por número de factura' }
     }[kind];
     const pre = q0.get('estado');
@@ -373,7 +373,7 @@
     const title = { pedidos: 'Pedido', albaranes: 'Albarán', facturas: 'Factura' }[kind];
     const ref = (k, n) => n ? `<button type="button" class="ref" data-go="${k}:${n}">${n}</button>` : '<span class="muted">Pendiente</span>';
     const meta = {
-      pedidos: () => [['Fecha', fecha(r.fecha)], r.entrega ? ['Entrega', diaTxt(r.entrega)] : ['Productos', plural(r.lineas.length, 'producto')], ['Albarán', ref('albaranes', r.albaran)], ['Factura', ref('facturas', r.factura)]],
+      pedidos: () => [['Fecha', fecha(r.fecha)], r.entrega ? ['Recogida', diaTxt(r.entrega)] : ['Productos', plural(r.lineas.length, 'producto')], ['Albarán', ref('albaranes', r.albaran)], ['Factura', ref('facturas', r.factura)]],
       albaranes: () => [['Fecha', fecha(r.fecha)], ['Peso total', kg(r.kg)], ['Pedido', ref('pedidos', r.pedido)], ['Factura', r.factura ? ref('facturas', r.factura) : '<span class="muted">Sin facturar</span>']],
       facturas: () => [['Fecha', fecha(r.fecha)], ['Vencimiento', `${fecha(r.vencimiento)}${r.estado !== 'Pagada' ? `<span class="sub ${r.estado === 'Vencida' ? 'is-bad' : ''}">${vencTxt(r)}</span>` : ''}`], ['Albaranes', r.albaranes.map(a => ref('albaranes', a)).join(' ')], ['Base + IVA', `${eur(r.base)} + ${eur(r.iva)}`]]
     }[kind]();
@@ -650,7 +650,7 @@
       ${base ? `<p class="note">${I.box}<span>Copiado del pedido <b>${base.numero}</b> del ${fecha(base.fecha)}. Ajusta las cantidades antes de enviarlo.</span></p>` : ''}
       <section><h3 class="dr-h">Productos</h3><div id="np-lines"></div>
         <div class="np-add"><label class="sr-only" for="np-prod">Añadir producto</label><select id="np-prod"><option value="">+ Añadir producto</option>${cat.map(p => `<option>${esc(p.producto)}</option>`).join('')}</select></div></section>
-      <section><h3 class="dr-h">Entrega</h3><div class="opts" role="radiogroup" aria-label="Día de entrega">${ent.map((d, i) => `<label class="opt"><input type="radio" name="ent" value="${d}"${i ? '' : ' checked'}><span><b>${diaTxt(d)}</b><small>${i === 0 ? 'Si lo envías antes de las 22:00' : 'Reparto de madrugada'}</small></span></label>`).join('')}</div></section>
+      <section><h3 class="dr-h">Recogida en el puesto</h3><div class="opts" role="radiogroup" aria-label="Día de recogida">${ent.map((d, i) => `<label class="opt"><input type="radio" name="ent" value="${d}"${i ? '' : ' checked'}><span><b>${diaTxt(d)}</b></span></label>`).join('')}</div><p class="hint" style="margin-top:.6rem">En ${esc(T().direccion)}. ${esc(T().horario)}.</p></section>
       <section><h3 class="dr-h"><label for="np-obs">Observaciones</label></h3><textarea id="np-obs" rows="3" placeholder="Por ejemplo: la merluza, en piezas de 2 kg"></textarea></section>
       <div class="totals" id="np-tot"></div>
       <p class="hint">Precios orientativos: pueden variar según la lonja del día. ${esc(T().nombre)} te confirmará el pedido.</p>`;
@@ -686,7 +686,7 @@
       const b = Math.round(ls.reduce((s, l) => s + l.importe, 0) * 100) / 100;
       c.pedidos.unshift({ numero: n, fecha: D.hoy, entrega, obs: $('#np-obs', wrap).value.trim(), estado: 'Pendiente de servir', lineas: ls, base: b, iva: Math.round(b * 10) / 100, total: Math.round(b * 110) / 100, albaran: null, factura: null });
       close();
-      toast(`Pedido ${n} enviado. Entrega: ${diaTxt(entrega).toLowerCase()}.`);
+      toast(`Pedido ${n} enviado. Recógelo el ${diaTxt(entrega).toLowerCase()} en ${T().nombre}.`);
       if (location.hash.startsWith('#/pedidos')) route(); else location.hash = '#/pedidos';
     };
     draw();
