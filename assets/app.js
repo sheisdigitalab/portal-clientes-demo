@@ -14,6 +14,8 @@
   const fecha = iso => new Date(iso + 'T12:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '');
   const kg = n => n.toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' kg';
   const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+  // Iniciales de una empresa sin artículos ni preposiciones: «Pescadería La Ola» → PO
+  const ini = n => String(n).split(/\s+/).filter(w => w && !/^(de|del|la|las|el|los|y|e|i)$/i.test(w)).map(w => w[0].toUpperCase()).slice(0, 2).join('');
   const mes = iso => cap(new Date(iso + 'T12:00').toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }));
   const diasHasta = iso => Math.round((new Date(iso + 'T12:00') - new Date(D.hoy + 'T12:00')) / 864e5);
   const plural = (n, s, p) => `${n} ${n === 1 ? s : (p || s + 's')}`;
@@ -203,7 +205,7 @@
       <header class="topbar"><div class="topbar__in">
         ${logo(view === 'panel' ? 'Panel de gestión' : 'Área de clientes')}
         <nav class="tabs${tabs.length < 4 ? ' tabs--few' : ''}" aria-label="Secciones">${tabs.map(([h, t, ic]) => `<a href="#/${h}"${h === active ? ' aria-current="page"' : ''}>${ic}<span>${t}</span></a>`).join('')}</nav>
-        <div class="who"><span class="who__avatar" aria-hidden="true">${esc(view === 'panel' ? whoName.replace('Equipo de ', '').split(' ').map(w => w[0]).slice(0, 2).join('') : whoName.split(' ').map(w => w[0]).slice(0, 2).join(''))}</span><span class="who__name"><b>${esc(whoName)}</b><span>${esc(whoSub)}</span></span>
+        <div class="who"><span class="who__avatar" aria-hidden="true">${esc(view === 'panel' ? T().iniciales : ini(whoSub))}</span><span class="who__name"><b>${esc(whoName)}</b><span>${esc(whoSub)}</span></span>
           ${view === 'cliente' ? `<button class="icon-btn" id="logout" aria-label="Cerrar sesión" title="Cerrar sesión">${I.out}</button>` : ''}</div>
       </div></header>
       <main class="main" id="main" tabindex="-1">${content}</main>
