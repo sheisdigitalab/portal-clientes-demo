@@ -443,7 +443,7 @@
       <section class="card" aria-label="Listado de clientes">
         <div class="toolbar">
           <div class="search">${I.search}<input type="search" id="q" placeholder="Buscar cliente o email" aria-label="Buscar cliente o email"></div>
-          <div class="chips" role="group" aria-label="Filtrar clientes">${[['todos', 'Todos'], ['vencido', 'Con vencido'], ['nunca', 'Sin acceso']].map(([k, l], i) => `<button type="button" class="chip" data-f="${k}" aria-pressed="${i === 0}">${l}</button>`).join('')}</div>
+          <div class="chips" role="group" aria-label="Filtrar clientes">${[['todos', 'Todos'], ['vencido', 'Con facturas vencidas'], ['nunca', 'No han entrado nunca']].map(([k, l], i) => `<button type="button" class="chip" data-f="${k}" aria-pressed="${i === 0}">${l}</button>`).join('')}</div>
         </div>
         <div id="tbl"></div>
       </section>`, panelTabs, 'Equipo de ' + t.nombre, 'Administración');
