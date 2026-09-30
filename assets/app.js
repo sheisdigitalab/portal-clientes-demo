@@ -38,7 +38,7 @@
   (() => {
     const p = new URLSearchParams(location.search);
     if (p.get('m') && D.mayoristas[p.get('m')]) store.set('tenant', p.get('m'));
-    if (p.get('vista')) store.set('view', p.get('vista') === 'panel' ? 'panel' : 'cliente');
+    if (p.get('vista') || p.get('m')) store.set('view', p.get('vista') === 'panel' ? 'panel' : 'cliente');
     if (p.get('entrar')) store.set('logged-' + (p.get('m') || store.get('tenant', 'laguna')), true);
   })();
   let tenantKey = store.get('tenant', 'laguna');
@@ -61,7 +61,7 @@
   const logo = (sub) => `<span class="logo"><span class="logo__mark" aria-hidden="true">${esc(T().iniciales)}</span><span class="logo__name">${esc(T().nombre)}${sub ? `<span class="logo__sub">${sub}</span>` : ''}</span></span>`;
   const pdfUrl = n => `docs/${tenantKey}-${n}.pdf`;
   const badge = e => {
-    const m = { Pagada: 'b-ok', Entregado: 'b-ok', Pendiente: 'b-warn', 'En reparto': 'b-info', Preparando: 'b-info', Vencida: 'b-bad', Facturado: 'b-ok', 'Sin facturar': 'b-warn' };
+    const m = { Pagada: 'b-ok', Pendiente: 'b-warn', Vencida: 'b-bad', 'Pendiente de servir': 'b-warn', Servido: 'b-info', Facturado: 'b-ok', 'Sin facturar': 'b-info' };
     return `<span class="badge ${m[e] || 'b-info'}">${esc(e)}</span>`;
   };
 
@@ -87,7 +87,7 @@
         <div>
           <h1>Tus pedidos y facturas, siempre a mano.</h1>
           <ul>
-            <li>${I.box}Sigue el estado de tus pedidos</li>
+            <li>${I.box}Consulta tus pedidos y si ya están servidos</li>
             <li>${I.truck}Consulta y descarga tus albaranes</li>
             <li>${I.doc}Descarga tus facturas en PDF cuando quieras</li>
           </ul>
@@ -172,12 +172,12 @@
   function inicio() {
     const c = C(); const pend = c.facturas.filter(f => f.estado !== 'Pagada');
     const year = c.facturas.filter(f => f.fecha.startsWith('2026'));
-    const activos = c.pedidos.filter(p => p.estado !== 'Entregado');
+    const activos = c.pedidos.filter(p => p.estado === 'Pendiente de servir');
     shell('inicio', `
       <div class="head"><div><h1>Hola, ${esc(c.contacto.split(' ')[0])}</h1><p>${esc(c.nombre)} · cliente de ${esc(T().nombre)}</p></div></div>
       <div class="stats">
         <div class="stat stat--brand"><span>Pendiente de pago</span><strong>${eur(pend.reduce((s, f) => s + f.total, 0))}</strong><small>${pend.length} factura${pend.length === 1 ? '' : 's'}</small></div>
-        <div class="stat"><span>Pedidos en curso</span><strong>${activos.length}</strong><small>${activos[0] ? 'Último: ' + esc(activos[0].estado.toLowerCase()) : 'Todo entregado'}</small></div>
+        <div class="stat"><span>Pendientes de servir</span><strong>${activos.length}</strong><small>${activos.length ? 'pedido' + (activos.length === 1 ? '' : 's') + ' por salir' : 'Todo servido'}</small></div>
         <div class="stat"><span>Facturado en 2026</span><strong>${eur(year.reduce((s, f) => s + f.total, 0))}</strong><small>${year.length} facturas</small></div>
         <div class="stat"><span>Albaranes este mes</span><strong>${c.albaranes.filter(a => a.fecha.startsWith('2026-09')).length}</strong><small>septiembre</small></div>
       </div>
@@ -194,7 +194,7 @@
   function listPage(kind) {
     const c = C();
     const cfg = {
-      pedidos: { title: 'Pedidos', desc: 'Todos tus pedidos y su estado de entrega.', rows: c.pedidos, states: ['Todos', 'Preparando', 'En reparto', 'Entregado'] },
+      pedidos: { title: 'Pedidos', desc: 'Cada pedido pasa a «Servido» cuando sale su albarán y a «Facturado» cuando entra en una factura.', rows: c.pedidos, states: ['Todos', 'Pendiente de servir', 'Servido', 'Facturado'] },
       albaranes: { title: 'Albaranes', desc: 'Un albarán por cada entrega. Descárgalos en PDF.', rows: c.albaranes, states: ['Todos', 'Sin facturar', 'Facturado'] },
       facturas: { title: 'Facturas', desc: 'Tus facturas agrupan los albaranes de cada quincena.', rows: c.facturas, states: ['Todas', 'Pendiente', 'Vencida', 'Pagada'] }
     }[kind];
@@ -250,12 +250,12 @@
     const lines = r.lineas || (kind === 'facturas' ? r.albaranes.flatMap(a => c.albaranes.find(x => x.numero === a)?.lineas || []) : []);
     const title = { pedidos: 'Pedido', albaranes: 'Albarán', facturas: 'Factura' }[kind];
     const meta = {
-      pedidos: () => [['Fecha', fecha(r.fecha)], ['Estado', r.estado], ['Albarán', r.albaran || 'Pendiente'], ['Productos', r.lineas.length]],
+      pedidos: () => [['Fecha', fecha(r.fecha)], ['Estado', r.estado], ['Albarán', r.albaran || 'Pendiente'], ['Factura', r.factura || 'Pendiente']],
       albaranes: () => [['Fecha', fecha(r.fecha)], ['Pedido', r.pedido], ['Peso total', kg(r.kg)], ['Factura', r.factura || 'Sin facturar']],
       facturas: () => [['Fecha', fecha(r.fecha)], ['Vencimiento', fecha(r.vencimiento)], ['Estado', r.estado], ['Albaranes', r.albaranes.join(', ')]]
     }[kind]();
-    const steps = ['Recibido', 'Preparando', 'En reparto', 'Entregado'];
-    const idx = kind === 'pedidos' ? steps.indexOf(r.estado) : -1;
+    const steps = ['Pedido recibido', 'Servido', 'Facturado'];
+    const idx = kind === 'pedidos' ? ({ 'Pendiente de servir': 0, Servido: 1, Facturado: 2 })[r.estado] : -1;
     const wrap = document.createElement('div');
     wrap.className = 'drawer'; wrap.setAttribute('role', 'dialog'); wrap.setAttribute('aria-modal', 'true'); wrap.setAttribute('aria-labelledby', 'dr-t');
     wrap.innerHTML = `<div class="drawer__panel">
@@ -269,7 +269,7 @@
         <div class="totals"><div><span>Base imponible</span><span>${eur(r.base)}</span></div><div><span>IVA 10 %</span><span>${eur(r.iva)}</span></div><div class="t"><span>Total</span><span>${eur(r.total)}</span></div></div>
       </div>
       <div class="drawer__foot">${kind !== 'pedidos' ? `<a class="btn btn--brand" href="${pdfUrl(r.numero)}" download>${I.down}Descargar PDF</a><a class="btn btn--ghost" href="${pdfUrl(r.numero)}" target="_blank" rel="noopener">${I.eye}Ver</a>`
-        : (r.albaran ? `<button class="btn btn--ghost" data-go="${r.albaran}">${I.truck}Ver albarán ${r.albaran}</button>` : `<p class="hint" style="margin:0">El albarán estará disponible cuando salga el pedido.</p>`)}</div>
+        : (r.albaran ? `<button class="btn btn--ghost" data-go="albaranes:${r.albaran}">${I.truck}Ver albarán ${r.albaran}</button>${r.factura ? `<button class="btn btn--ghost" data-go="facturas:${r.factura}">${I.doc}Ver factura ${r.factura}</button>` : ''}` : `<p class="hint" style="margin:0">El albarán estará disponible cuando se sirva el pedido.</p>`)}</div>
     </div>`;
     const prev = document.activeElement;
     document.body.append(wrap); document.body.style.overflow = 'hidden';
@@ -283,7 +283,7 @@
     document.addEventListener('keydown', onKey);
     wrap.addEventListener('click', e => {
       if (e.target === wrap || e.target.closest('[data-close]')) close();
-      const g = e.target.closest('[data-go]'); if (g) { close(); location.hash = '#/albaranes'; setTimeout(() => openDoc('albaranes', g.dataset.go), 300); }
+      const g = e.target.closest('[data-go]'); if (g) { const [k, n] = g.dataset.go.split(':'); close(); location.hash = '#/' + k; setTimeout(() => openDoc(k, n), 300); }
     });
   }
 
